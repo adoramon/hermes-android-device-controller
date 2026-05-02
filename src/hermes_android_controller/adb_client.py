@@ -25,6 +25,15 @@ class AdbCommandResult:
     def ok(self) -> bool:
         return self.returncode == 0 and not self.timed_out
 
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "ok": self.ok,
+            "command": self.command,
+            "stdout": self.stdout,
+            "stderr": self.stderr,
+            "returncode": self.returncode,
+        }
+
 
 class AdbClient:
     """ADB client that always invokes subprocess.run with argv lists."""
@@ -32,17 +41,18 @@ class AdbClient:
     def __init__(
         self,
         adb_path: str = "adb",
+        device_id: str | None = None,
         serial: str | None = None,
         default_timeout: float = DEFAULT_TIMEOUT_SECONDS,
     ) -> None:
         self.adb_path = adb_path
-        self.serial = serial
+        self.device_id = device_id or serial
         self.default_timeout = default_timeout
 
     def build_command(self, args: Sequence[str]) -> list[str]:
         command = [self.adb_path]
-        if self.serial:
-            command.extend(["-s", self.serial])
+        if self.device_id:
+            command.extend(["-s", self.device_id])
         command.extend(str(arg) for arg in args)
         return command
 

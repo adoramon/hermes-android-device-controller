@@ -1,10 +1,9 @@
 import unittest
 
 from hermes_android_controller.adb_client import AdbClient, AdbCommandResult
-from hermes_android_controller.input_actions import input_text, open_app, swipe, tap
+from hermes_android_controller.input_actions import input_text, keyevent, open_app, swipe, tap
 from hermes_android_controller.mock_location import (
     MOCK_LOCATION_ACTION,
-    MOCK_LOCATION_HELPER_PACKAGE,
     set_mock_location,
 )
 from hermes_android_controller.screen_reader import dump_screen_xml, take_screenshot
@@ -56,10 +55,12 @@ class CommandBuilderTests(unittest.TestCase):
         tap(10, 20, client=client)
         swipe(1, 2, 3, 4, 500, client=client)
         input_text("hello world", client=client)
+        keyevent(4, client=client)
 
         self.assertEqual(client.calls[0][0], ["shell", "input", "tap", "10", "20"])
         self.assertEqual(client.calls[1][0], ["shell", "input", "swipe", "1", "2", "3", "4", "500"])
         self.assertEqual(client.calls[2][0], ["shell", "input", "text", "hello%sworld"])
+        self.assertEqual(client.calls[3][0], ["shell", "input", "keyevent", "4"])
 
 
     def test_screen_reader_commands(self):
@@ -68,8 +69,10 @@ class CommandBuilderTests(unittest.TestCase):
         dump_screen_xml(client=client)
         take_screenshot(client=client)
 
-        self.assertEqual(client.calls[0], (["exec-out", "uiautomator", "dump", "/dev/tty"], None, True))
-        self.assertEqual(client.calls[1], (["exec-out", "screencap", "-p"], None, False))
+        self.assertEqual(client.calls[0], (["shell", "uiautomator", "dump", "/sdcard/hermes_screen.xml"], None, True))
+        self.assertEqual(client.calls[1][0][:2], ["pull", "/sdcard/hermes_screen.xml"])
+        self.assertEqual(client.calls[2], (["shell", "screencap", "-p", "/sdcard/hermes_screenshot.png"], None, True))
+        self.assertEqual(client.calls[3][0][:2], ["pull", "/sdcard/hermes_screenshot.png"])
 
 
     def test_mock_location_broadcast_command(self):
@@ -78,9 +81,8 @@ class CommandBuilderTests(unittest.TestCase):
         response = set_mock_location(31.23, 121.47, 25, client=client)
 
         self.assertTrue(response["ok"])
-        self.assertEqual(client.calls[0][0], ["shell", "pm", "path", MOCK_LOCATION_HELPER_PACKAGE])
         self.assertEqual(
-            client.calls[1][0],
+            client.calls[0][0],
             [
                 "shell",
                 "am",
@@ -107,3 +109,23 @@ class CommandBuilderTests(unittest.TestCase):
 
         self.assertFalse(response["ok"])
         self.assertIn("Mock Location Helper", response["message"])
+
+    def test_invalid_coordinates_are_rejected(self):
+        client = FakeClient()
+
+        with self.assertRaises(ValueError):
+            tap(-1, 20, client=client)
+        with self.assertRaises(ValueError):
+            swipe(0, 0, 10, 10, 0, client=client)
+        with self.assertRaises(ValueError):
+            keyevent(-1, client=client)
+
+    def test_invalid_location_is_rejected(self):
+        client = FakeClient()
+
+        with self.assertRaises(ValueError):
+            set_mock_location(91, 121.47, 10, client=client)
+        with self.assertRaises(ValueError):
+            set_mock_location(31.23, 181, 10, client=client)
+        with self.assertRaises(ValueError):
+            set_mock_location(31.23, 121.47, 0, client=client)

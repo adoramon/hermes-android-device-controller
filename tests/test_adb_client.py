@@ -23,17 +23,22 @@ class AdbClientTests(unittest.TestCase):
             ],
         )
 
+    def test_build_command_includes_device_id_when_present(self):
+        client = AdbClient(device_id="device-123")
+
+        self.assertEqual(client.build_command(["devices"]), ["adb", "-s", "device-123", "devices"])
 
     def test_run_uses_subprocess_list_arguments(self):
         captured = {}
 
-        def fake_run(command, capture_output, text, timeout, check):
+        def fake_run(command, capture_output, text, timeout, check, **kwargs):
             captured.update(
                 command=command,
                 capture_output=capture_output,
                 text=text,
                 timeout=timeout,
                 check=check,
+                shell=kwargs.get("shell"),
             )
             return subprocess.CompletedProcess(command, 0, "ok", "")
 
@@ -48,6 +53,7 @@ class AdbClientTests(unittest.TestCase):
                 "text": True,
                 "timeout": 7,
                 "check": False,
+                "shell": None,
             },
         )
         self.assertEqual(result.command, ["adb", "devices", "-l"])
@@ -55,6 +61,17 @@ class AdbClientTests(unittest.TestCase):
         self.assertEqual(result.stdout, "ok")
         self.assertEqual(result.stderr, "")
         self.assertEqual(result.returncode, 0)
+        self.assertTrue(result.ok)
+        self.assertEqual(
+            result.to_dict(),
+            {
+                "ok": True,
+                "command": ["adb", "devices", "-l"],
+                "stdout": "ok",
+                "stderr": "",
+                "returncode": 0,
+            },
+        )
 
 
     def test_timeout_result_has_required_fields(self):

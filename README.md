@@ -1,8 +1,8 @@
 # hermes-android-device-controller
 
-Hermes Android Device Controller is a Python-based ADB control base for a USB-connected Pixel 6 on a Mac mini. It provides a narrow, auditable device-control layer for Hermes execution environments.
+Hermes Android Device Controller is a Python-based ADB control base for a USB-connected Pixel 6 on a Mac mini. It provides a narrow, auditable device-control layer for Hermes Android execution environments.
 
-This repository intentionally does not implement real attendance, approval, risk-control bypass, or enterprise App automation workflows. The current phase only prepares the GitHub project framework and generic ADB primitives.
+This repository intentionally does not implement real attendance, approval, risk-control bypass, fake check-in, or enterprise App automation workflows. Phase 1 is limited to generic ADB primitives and local device self-tests.
 
 ## Project Layout
 
@@ -34,25 +34,38 @@ python -m pip install -e ".[dev]"
 adb devices -l
 ```
 
+## Pixel Settings
+
+On the Pixel 6:
+
+1. Open Settings > About phone, tap Build number seven times to enable Developer options.
+2. Open Settings > System > Developer options.
+3. Enable USB debugging.
+4. Keep the screen unlocked for the first authorization prompt.
+5. For future mock-location work, select the Hermes Mock Location Helper App as the mock location app only in authorized test environments.
+
 ## Provided Tool Functions
 
-- `device_status()`
-- `open_app(package_name)`
-- `tap(x, y)`
-- `swipe(x1, y1, x2, y2, duration_ms)`
-- `input_text(text)`
-- `dump_screen_xml()`
-- `take_screenshot()`
-- `set_mock_location(lat, lon, accuracy)`
+- `android_device_status()`
+- `android_open_app(package_name)`
+- `android_input_tap(x, y)`
+- `android_input_swipe(x1, y1, x2, y2, duration_ms=300)`
+- `android_input_text(text)`
+- `android_keyevent(code)`
+- `android_dump_screen_xml()`
+- `android_take_screenshot()`
+- `android_set_mock_location(lat, lon, accuracy=10)`
 
-`set_mock_location` currently checks for helper package `com.hermes.mocklocation`, then sends an ADB broadcast to `com.hermes.mocklocation.SET`. It expects a future Hermes Mock Location Helper App to be installed, selected as the Android mock location app, and authorized for test environments.
+`android_set_mock_location` currently sends an ADB broadcast to `com.hermes.mocklocation.SET`. It expects a future Hermes Mock Location Helper App to receive the broadcast in authorized test environments.
 
-## Self-Test Commands
+## Phase 1 Self-Test Commands
 
 ```bash
 pytest
-python scripts/check_device.py
-python scripts/dump_screen.py
+bash scripts/check_device.sh
+bash scripts/dump_screen.sh
+bash scripts/test_input.sh
+bash scripts/test_screenshot.sh
 python scripts/test_mock_location.py 31.2304 121.4737 25
 ```
 

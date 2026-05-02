@@ -5,11 +5,9 @@ from hermes_android_controller import dump_screen_xml
 
 def main() -> int:
     result = dump_screen_xml()
-    if result.stdout:
-        print(result.stdout, end="" if str(result.stdout).endswith("\n") else "\n")
-    if result.stderr:
-        print(result.stderr, end="" if str(result.stderr).endswith("\n") else "\n")
-    return result.returncode
+    print(result["message"])
+    print("path:", result["path"])
+    return 0 if result["ok"] else 1
 
 
 if __name__ == "__main__":

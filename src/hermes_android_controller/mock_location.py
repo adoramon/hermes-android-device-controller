@@ -6,23 +6,16 @@ from .adb_client import AdbClient, AdbCommandResult, get_default_client
 
 
 MOCK_LOCATION_ACTION = "com.hermes.mocklocation.SET"
-MOCK_LOCATION_HELPER_PACKAGE = "com.hermes.mocklocation"
 
 
 def set_mock_location(
     lat: float,
     lon: float,
-    accuracy: float,
+    accuracy: float = 10,
     client: AdbClient | None = None,
 ) -> dict[str, object]:
+    _validate_location(lat, lon, accuracy)
     adb = client or get_default_client()
-    package_check = adb.shell(["pm", "path", MOCK_LOCATION_HELPER_PACKAGE])
-    if not package_check.ok or not str(package_check.stdout).strip():
-        return _mock_location_error(
-            package_check,
-            "Mock Location Helper App is not installed or is not visible to ADB.",
-        )
-
     result = adb.shell(
         [
             "am",
@@ -44,16 +37,8 @@ def set_mock_location(
     if not result.ok:
         return _mock_location_error(result, "Mock Location Helper broadcast failed.")
 
-    stdout = str(result.stdout)
-    if "Broadcast completed" not in stdout:
-        return _mock_location_error(
-            result,
-            "Mock Location Helper App may not be installed or did not receive the broadcast.",
-        )
-
     return {
         "ok": True,
-        "package_check": package_check,
         "result": result,
         "message": "Mock location broadcast completed.",
     }
@@ -68,3 +53,12 @@ def _mock_location_error(result: AdbCommandResult, message: str) -> dict[str, ob
             "then enable it as the Android mock location app in Developer options."
         ),
     }
+
+
+def _validate_location(lat: float, lon: float, accuracy: float) -> None:
+    if not isinstance(lat, int | float) or not -90 <= lat <= 90:
+        raise ValueError("lat must be a number between -90 and 90.")
+    if not isinstance(lon, int | float) or not -180 <= lon <= 180:
+        raise ValueError("lon must be a number between -180 and 180.")
+    if not isinstance(accuracy, int | float) or accuracy <= 0:
+        raise ValueError("accuracy must be a positive number.")
