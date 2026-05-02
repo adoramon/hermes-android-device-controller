@@ -1,0 +1,10 @@
+{
+  "name": "hermes-android-device-controller",
+  "version": "0.1.0",
+  "description": "ADB-based Android execution device controller base for Hermes.",
+  "entrypoint": "hermes_android_controller.skill_tools",
+  "safety": {
+    "businessAutomation": false,
+    "mockLocation": "test-environments-only"
+  }
+}
