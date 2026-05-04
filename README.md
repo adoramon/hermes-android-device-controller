@@ -70,3 +70,29 @@ python scripts/test_mock_location.py 31.2304 121.4737 25
 ```
 
 The scripts call generic ADB primitives only. They do not automate any business App workflow.
+
+## Phase 2 Mock Location Helper
+
+The Android helper app lives in `android-helper/`.
+
+Build:
+
+```bash
+cd android-helper
+./gradlew :app:assembleDebug
+```
+
+This requires Android SDK Platform 36 via `ANDROID_HOME` or `android-helper/local.properties`.
+
+Install:
+
+```bash
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+```
+
+Select `Hermes Mock Location Helper` in Pixel Developer options > Select mock location app, then test:
+
+```bash
+adb shell am broadcast -a com.hermes.mocklocation.SET --ef lat 31.2304 --ef lon 121.4737 --ef accuracy 10
+adb logcat -s HermesMockLocation
+```
