@@ -2,7 +2,7 @@
 
 Hermes Android Device Controller is a Python-based ADB control base for a USB-connected Pixel 6 on a Mac mini. It provides a narrow, auditable device-control layer for Hermes Android execution environments.
 
-This repository intentionally does not implement real attendance, approval, risk-control bypass, fake check-in, or enterprise App automation workflows. Phase 1 is limited to generic ADB primitives and local device self-tests.
+This repository intentionally does not implement real attendance, approval, risk-control bypass, fake check-in, or enterprise App automation workflows. Phase 1 is limited to generic ADB primitives and local device self-tests. Phase 2.5 is limited to Hermes Skill/profile integration and local device-control verification.
 
 ## Project Layout
 
@@ -96,3 +96,28 @@ Select `Hermes Mock Location Helper` in Pixel Developer options > Select mock lo
 adb shell am broadcast -a com.hermes.mocklocation.SET --ef lat 31.2304 --ef lon 121.4737 --ef accuracy 10
 adb logcat -s HermesMockLocation
 ```
+
+## Phase 2.5 Hermes Profile Integration
+
+The local Hermes Skill can be linked into the `sunny-wechat-lite` profile:
+
+```bash
+cd /Users/administrator/Code/hermes-android-device-controller
+bash scripts/link_to_sunny_wechat_lite.sh
+```
+
+Verify the profile link, Skill files, Python package path, and Pixel 6 ADB visibility:
+
+```bash
+bash scripts/verify_hermes_profile_link.sh
+```
+
+Run the Hermes preflight from the repo root:
+
+```bash
+PYTHONPATH=src python3 scripts/hermes_preflight.py
+```
+
+The preflight imports `hermes_android_controller.skill_tools`, calls `android_device_status()`, and sends a test mock-location broadcast through `android_set_mock_location(31.2304, 121.4737, 10)`. It does not operate any enterprise App.
+
+After creating or changing the Skill link, restart Hermes so the `sunny-wechat-lite` profile rescans Skills. See [docs/phase-2.5-hermes-profile-integration.md](docs/phase-2.5-hermes-profile-integration.md) for restart notes, WeChat test wording, and troubleshooting.

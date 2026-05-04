@@ -3,6 +3,54 @@
   "version": "0.1.0",
   "description": "ADB-based Android execution device controller base for Hermes.",
   "entrypoint": "hermes_android_controller.skill_tools",
+  "pythonPath": "src",
+  "tools": [
+    {
+      "name": "android_device_status",
+      "description": "Return ADB device, screen, and foreground app status for the connected Android device."
+    },
+    {
+      "name": "android_open_app",
+      "description": "Open an Android package by package name via ADB."
+    },
+    {
+      "name": "android_input_tap",
+      "description": "Tap screen coordinates via ADB input."
+    },
+    {
+      "name": "android_input_swipe",
+      "description": "Swipe between screen coordinates via ADB input."
+    },
+    {
+      "name": "android_input_text",
+      "description": "Input text via ADB input."
+    },
+    {
+      "name": "android_keyevent",
+      "description": "Send an Android keyevent code via ADB input."
+    },
+    {
+      "name": "android_dump_screen_xml",
+      "description": "Dump the current UIAutomator screen XML."
+    },
+    {
+      "name": "android_take_screenshot",
+      "description": "Capture a screenshot from the connected Android device."
+    },
+    {
+      "name": "android_set_mock_location",
+      "description": "Send a test-environment mock location broadcast to the Hermes Mock Location Helper App."
+    }
+  ],
+  "metadata": {
+    "hermes": {
+      "profile": "sunny-wechat-lite",
+      "skillLink": "~/.hermes/profiles/sunny-wechat-lite/skills/hermes-android-device-controller-local",
+      "deviceId": "25091FDF60030U",
+      "mockLocationPackage": "com.hermes.mocklocation",
+      "mockLocationAction": "com.hermes.mocklocation.SET"
+    }
+  },
   "safety": {
     "businessAutomation": false,
     "mockLocation": "test-environments-only"

@@ -56,9 +56,9 @@ def _mock_location_error(result: AdbCommandResult, message: str) -> dict[str, ob
 
 
 def _validate_location(lat: float, lon: float, accuracy: float) -> None:
-    if not isinstance(lat, int | float) or not -90 <= lat <= 90:
+    if not isinstance(lat, (int, float)) or not -90 <= lat <= 90:
         raise ValueError("lat must be a number between -90 and 90.")
-    if not isinstance(lon, int | float) or not -180 <= lon <= 180:
+    if not isinstance(lon, (int, float)) or not -180 <= lon <= 180:
         raise ValueError("lon must be a number between -180 and 180.")
-    if not isinstance(accuracy, int | float) or accuracy <= 0:
+    if not isinstance(accuracy, (int, float)) or accuracy <= 0:
         raise ValueError("accuracy must be a positive number.")
