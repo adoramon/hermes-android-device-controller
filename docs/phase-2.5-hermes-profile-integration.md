@@ -94,6 +94,30 @@ ls -l ~/.hermes/profiles/sunny-wechat-lite/skills/hermes-android-device-controll
 
 然后重启 Hermes，让 profile 重新扫描 Skills。
 
+### 微信回复误路由到 Apple Calendar
+
+如果微信侧发送：
+
+```text
+运行 Hermes Android preflight
+```
+
+却回复当前 profile 只包含 Apple Calendar 或找不到 Android preflight，先从本仓库运行：
+
+```bash
+cd /Users/administrator/Code/hermes-android-device-controller
+bash scripts/verify_hermes_profile_link.sh
+PYTHONPATH=src python3 scripts/hermes_preflight.py
+```
+
+若两个命令都通过，说明本仓库和 ADB 侧是好的，问题通常在 Hermes 当前微信运行实例的 profile 路由上下文：重启 `sunny-wechat-lite`，让 `.skills_prompt_snapshot.json` 和 `SOUL.md` 重新进入当前对话上下文。
+
+建议在 profile 的 Android 路由提示中明确加入：
+
+```text
+当用户说“运行 Hermes Android preflight”“检查 Pixel 6 ADB 状态”“检查安卓手机状态”时，必须使用 /Users/administrator/Code/hermes-android-device-controller/SKILL.md，并运行本仓库 scripts/hermes_preflight.py 或 scripts/verify_hermes_profile_link.sh；不得回答该项目是 Apple Calendar 项目。
+```
+
 ### Python import 失败
 
 使用 `PYTHONPATH=src` 从仓库根目录运行：

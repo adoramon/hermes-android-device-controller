@@ -1,7 +1,7 @@
 {
   "name": "hermes-android-device-controller",
   "version": "0.1.0",
-  "description": "ADB-based Android execution device controller base for Hermes.",
+  "description": "ADB-based Android device controller for Hermes, including Pixel 6 status, Android preflight, screenshots/XML, and WeChat approval plan reports.",
   "entrypoint": "hermes_android_controller.skill_tools",
   "pythonPath": "src",
   "tools": [
@@ -40,6 +40,78 @@
     {
       "name": "android_set_mock_location",
       "description": "Send a test-environment mock location broadcast to the Hermes Mock Location Helper App."
+    },
+    {
+      "name": "android_open_enterprise_app",
+      "description": "Open the configured enterprise Android app for read-only UI probing."
+    },
+    {
+      "name": "android_probe_current_screen",
+      "description": "Capture foreground package, UI XML, and screenshot paths for the current Android screen."
+    },
+    {
+      "name": "android_parse_current_ui",
+      "description": "Dump and parse the current Android UIAutomator XML into relevant UI nodes."
+    },
+    {
+      "name": "android_summarize_current_screen",
+      "description": "Summarize the current Android screen with clickable elements, input fields, and sensitive action risk markers."
+    },
+    {
+      "name": "android_enterprise_login",
+      "description": "Perform authorized enterprise app credential login from local environment variables, stopping for user-provided SMS verification when required."
+    },
+    {
+      "name": "android_enterprise_detect_sms_code",
+      "description": "Detect whether the current enterprise app screen is waiting for an SMS verification code."
+    },
+    {
+      "name": "android_enterprise_submit_sms_code",
+      "description": "Submit a user-provided 4-8 digit enterprise app SMS verification code."
+    },
+    {
+      "name": "android_enterprise_handle_wechat_sms_code",
+      "description": "Extract and submit an enterprise app SMS code from WeChat text in the format 企信验证码：xxxxxx."
+    },
+    {
+      "name": "android_detect_approval_menus",
+      "description": "Detect known enterprise approval menu entries on the current app screen."
+    },
+    {
+      "name": "android_build_daily_approval_plan",
+      "description": "Build a dry-run enterprise approval plan with screenshots and UI XML without approving anything."
+    },
+    {
+      "name": "android_build_approval_wechat_report",
+      "description": "Build a concise WeChat Markdown approval plan report with approval type, status, count, details, and handling method; it does not execute approvals."
+    },
+    {
+      "name": "android_probe_approval_menu",
+      "description": "Open one approval menu by name for dry-run UI probing only."
+    },
+    {
+      "name": "android_execute_daily_approval_plan",
+      "description": "Execute eligible approval items only after exact user confirmation: 确认审批."
+    },
+    {
+      "name": "android_execute_work_hour_approval",
+      "description": "Controlled work-hour approval execution gated by the exact confirmation phrase."
+    },
+    {
+      "name": "android_execute_attendance_exception_approval",
+      "description": "Controlled attendance-exception approval execution gated by the exact confirmation phrase."
+    },
+    {
+      "name": "android_execute_leave_approval",
+      "description": "Controlled leave approval execution gated by the exact confirmation phrase."
+    },
+    {
+      "name": "android_execute_comp_time_approval",
+      "description": "Controlled comp-time approval execution gated by the exact confirmation phrase."
+    },
+    {
+      "name": "android_execute_missing_clock_approval",
+      "description": "Controlled missing-clock approval execution gated by the exact confirmation phrase."
     }
   ],
   "metadata": {
