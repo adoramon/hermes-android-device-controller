@@ -4,11 +4,19 @@ set -u
 SOURCE_DIR="/Users/administrator/Code/hermes-android-device-controller"
 PROFILE_DIR="${HOME}/.hermes/profiles/sunny-wechat-lite"
 LINK_PATH="${PROFILE_DIR}/skills/hermes-android-device-controller-local"
+SNAPSHOT_PATH="${PROFILE_DIR}/.skills_prompt_snapshot.json"
+SOUL_PATH="${PROFILE_DIR}/SOUL.md"
 DEVICE_ID="25091FDF60030U"
 FAILURES=0
+WARNINGS=0
 
 ok() {
   printf 'OK   %s\n' "$1"
+}
+
+warn() {
+  printf 'WARN %s\n' "$1"
+  WARNINGS=$((WARNINGS + 1))
 }
 
 fail() {
@@ -63,6 +71,26 @@ else
   fail "src/hermes_android_controller is missing"
 fi
 
+if [ -f "${SNAPSHOT_PATH}" ]; then
+  if grep -q "hermes-android-device-controller-local" "${SNAPSHOT_PATH}"; then
+    ok "Hermes skills prompt snapshot includes hermes-android-device-controller-local"
+  else
+    fail "Hermes skills prompt snapshot does not include hermes-android-device-controller-local; restart Hermes to rescan skills"
+  fi
+else
+  warn "Hermes skills prompt snapshot is missing; restart Hermes after linking the skill"
+fi
+
+if [ -f "${SOUL_PATH}" ]; then
+  if grep -Eq "Android|安卓|Pixel 6|preflight|hermes-android" "${SOUL_PATH}"; then
+    ok "SOUL.md contains an Android/preflight routing hint"
+  else
+    warn "SOUL.md has no Android/preflight routing hint; WeChat routing may fall back to unrelated skills"
+  fi
+else
+  warn "SOUL.md is missing; skipping profile routing hint check"
+fi
+
 if ! command -v adb >/dev/null 2>&1; then
   fail "adb is not on PATH"
 else
@@ -80,9 +108,13 @@ else
 fi
 
 if [ "${FAILURES}" -eq 0 ]; then
-  echo "OK   Hermes profile link verification passed"
+  if [ "${WARNINGS}" -gt 0 ]; then
+    echo "OK   Hermes profile link verification passed with ${WARNINGS} warning(s)"
+  else
+    echo "OK   Hermes profile link verification passed"
+  fi
   exit 0
 fi
 
-echo "FAIL Hermes profile link verification failed with ${FAILURES} issue(s)"
+echo "FAIL Hermes profile link verification failed with ${FAILURES} issue(s) and ${WARNINGS} warning(s)"
 exit 1
