@@ -30,8 +30,8 @@ Allowed:
 - Open Android packages by explicit package name.
 - Use generic ADB input primitives: tap, swipe, text, keyevent.
 - Dump current screen XML or take screenshots for debugging.
-- Set mock location only through the authorized Hermes Mock Location Helper App in test environments.
 - Perform authorized enterprise App login with local credentials and user-provided SMS verification code.
+- Translate an address to a 50 meter randomized coordinate and inspect Ghostmapx state on the user's own Android test device.
 
 Not allowed:
 
@@ -39,6 +39,7 @@ Not allowed:
 - Do not read SMS messages or bypass SMS verification.
 - Do not submit enterprise App approval or business forms.
 - Do not bypass risk controls, hide mock location, evade detection, use Root/Hook, or add anti-detection behavior.
+- Do not connect Ghostmapx location changes to attendance, check-in, enterprise App workflows, or any compliance/risk-control bypass.
 - Do not claim a business action completed unless a local command actually returned that result.
 
 ## When To Use
@@ -50,11 +51,9 @@ Use this skill when the user asks in Chinese or English for:
 - `检查 Android 设备连接`
 - `运行 Android preflight`
 - `运行 Hermes Android preflight`
-- `测试 Mock Location Helper`
 - `测试安卓截图 / dump XML / ADB 输入`
 - `用 Hermes 控制 Pixel 6`
 - `android_device_status`
-- `android_set_mock_location`
 - `打开企业 App`
 - `企业 App 登录`
 - `企信登录`
@@ -71,12 +70,19 @@ Use this skill when the user asks in Chinese or English for:
 - `android_build_approval_wechat_report`
 - `确认审批`
 - `android_execute_daily_approval_plan`
+- `android_run_daily_approval_scan_once`
+- `android_force_daily_approval_scan`
+- `Ghostmapx 地址转坐标`
+- `android_prepare_ghostmapx_location`
+- `android_apply_ghostmapx_location`
 
 For status or preflight requests, run the local scripts first and answer only from the command JSON/output. Do not freely infer device state from old chat history.
 For enterprise login requests, use local `.env` credentials only. If SMS verification is required, ask the user to reply exactly `企信验证码：xxxxxx`; do not read SMS or bypass verification.
 For approval menu requests, only run dry-run probes. Do not click approve, agree, pass, submit, confirm, or select-all controls.
 For WeChat approval plan reports, treat `生成打卡审批报告`, `打卡审批报告`, and `生成微信审批计划报告` as equivalent. Use `android_build_approval_wechat_report()` and return only the Markdown table plus the confirmation prompt. Do not include `risk_level`, XML paths, screenshot paths, or raw JSON in the WeChat reply.
 For controlled approval execution, require the exact phrase `确认审批`, build a fresh dry-run plan first, skip ineligible/unknown/manual-review menus, and record before/after XML and screenshots for every click.
+For daily OA approval automation, scheduled scans may only generate and push the dry-run Markdown report. They must not approve anything; approval execution remains gated by the WeChat phrase `确认审批`.
+For Ghostmapx requests, stay within personal/test-device usage: geocoding and read-only status probes are allowed; every address coordinate should be randomized within a 50 meter radius by default; entering coordinates requires the exact confirmation phrase `确认Ghostmapx测试定位`; never combine this with enterprise attendance/check-in, risk-control bypass, hiding mock location, Root/Hook, or anti-detection work.
 
 ## Tool Entrypoint
 
@@ -103,7 +109,6 @@ Available functions:
 - `android_keyevent(code)`
 - `android_dump_screen_xml()`
 - `android_take_screenshot()`
-- `android_set_mock_location(lat, lon, accuracy=10)`
 - `android_open_enterprise_app()`
 - `android_probe_current_screen()`
 - `android_parse_current_ui()`
@@ -117,6 +122,13 @@ Available functions:
 - `android_build_approval_wechat_report()`
 - `android_probe_approval_menu(menu_name)`
 - `android_execute_daily_approval_plan(confirm_text)`
+- `android_run_daily_approval_scan_once()`
+- `android_force_daily_approval_scan()`
+- `android_ghostmapx_geocode(address, provider="auto", random_radius_meters=50)`
+- `android_open_ghostmapx()`
+- `android_probe_ghostmapx()`
+- `android_prepare_ghostmapx_location(address, provider="auto", random_radius_meters=50)`
+- `android_apply_ghostmapx_location(address, provider="auto", confirm_text="", random_radius_meters=50)`
 - `android_execute_work_hour_approval(confirm_text)`
 - `android_execute_attendance_exception_approval(confirm_text)`
 - `android_execute_leave_approval(confirm_text)`
@@ -183,4 +195,4 @@ bash scripts/verify_hermes_profile_link.sh
 PYTHONPATH=src python3 scripts/hermes_preflight.py
 ```
 
-The preflight only checks imports, ADB status, and the mock-location helper broadcast. It does not operate any enterprise App.
+The preflight only checks imports and ADB status. It does not operate any enterprise App.

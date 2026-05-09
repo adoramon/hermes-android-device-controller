@@ -6,9 +6,11 @@ from unittest.mock import patch
 
 from hermes_android_controller.adb_client import AdbClient, AdbCommandResult
 from hermes_android_controller.enterprise_auth import (
+    detect_app_update_prompt,
     detect_password_update_prompt,
     detect_login_screen,
     detect_sms_code_screen,
+    dismiss_app_update_prompt,
     extract_sms_code,
     fill_login_credentials,
     load_enterprise_credentials,
@@ -37,6 +39,15 @@ PASSWORD_UPDATE_XML = """<?xml version="1.0" encoding="UTF-8"?>
   <node text="为了账号安全，请更新密码" resource-id="com.example:id/title" class="android.widget.TextView" content-desc="" clickable="false" enabled="true" bounds="[0,100][1080,180]" />
   <node text="暂不修改" resource-id="com.example:id/later" class="android.widget.Button" content-desc="" clickable="true" enabled="true" bounds="[80,430][500,520]" />
   <node text="修改密码" resource-id="com.example:id/change" class="android.widget.Button" content-desc="" clickable="true" enabled="true" bounds="[560,430][1000,520]" />
+</hierarchy>
+"""
+
+APP_UPDATE_XML = """<?xml version="1.0" encoding="UTF-8"?>
+<hierarchy rotation="0">
+  <node text="提示" resource-id="android:id/alertTitle" class="android.widget.TextView" content-desc="" clickable="false" enabled="true" bounds="[133,879][947,950]" />
+  <node text="最新版本为：3.5.0&#10;更新内容：&#10;1、新增工作圈管理功能；&#10;版本大小：33MB" resource-id="android:id/message" class="android.widget.TextView" content-desc="" clickable="false" enabled="true" bounds="[70,971][1010,1469]" />
+  <node text="暂不更新" resource-id="android:id/button2" class="android.widget.Button" content-desc="" clickable="true" enabled="true" bounds="[558,1480][768,1622]" />
+  <node text="立即更新" resource-id="android:id/button1" class="android.widget.Button" content-desc="" clickable="true" enabled="true" bounds="[768,1480][978,1622]" />
 </hierarchy>
 """
 
@@ -121,6 +132,24 @@ class EnterpriseAuthTests(unittest.TestCase):
 
         self.assertTrue(result["is_password_update_prompt"])
         self.assertEqual(result["dismiss_button"]["text"], "暂不修改")
+
+    def test_app_update_prompt_is_detected_with_safe_dismiss(self):
+        result = detect_app_update_prompt(xml_path=self._write_xml(APP_UPDATE_XML))
+
+        self.assertTrue(result["is_app_update_prompt"])
+        self.assertEqual(result["dismiss_button"]["text"], "暂不更新")
+
+    def test_app_update_prompt_dismiss_taps_safe_button(self):
+        client = FakeClient()
+        with patch(
+            "hermes_android_controller.enterprise_auth.dump_screen_xml",
+            return_value={"ok": True, "path": self._write_xml(APP_UPDATE_XML)},
+        ):
+            result = dismiss_app_update_prompt(client=client)
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["button"]["text"], "暂不更新")
+        self.assertIn((["input", "tap", "663", "1551"], None), client.calls)
 
 
 if __name__ == "__main__":

@@ -8,10 +8,16 @@ android-helper/.gradle/
 .mypy_cache/
 .venv/
 venv/
+.env
 dist/
 build/
+var/
 hermes_screenshot_*.png
 hermes_screen_*.xml
 .DS_Store
 local.properties
 android-helper/local.properties
+.env
+__pycache__/
+*.png
+*.xml

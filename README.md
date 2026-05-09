@@ -11,7 +11,6 @@ src/hermes_android_controller/   Python package
 scripts/                         Local self-check scripts
 tests/                           pytest tests
 docs/                            Design and safety documentation
-android-helper/                  Placeholder for the future helper app
 ```
 
 ## Install
@@ -42,7 +41,6 @@ On the Pixel 6:
 2. Open Settings > System > Developer options.
 3. Enable USB debugging.
 4. Keep the screen unlocked for the first authorization prompt.
-5. For future mock-location work, select the Hermes Mock Location Helper App as the mock location app only in authorized test environments.
 
 ## Provided Tool Functions
 
@@ -54,9 +52,6 @@ On the Pixel 6:
 - `android_keyevent(code)`
 - `android_dump_screen_xml()`
 - `android_take_screenshot()`
-- `android_set_mock_location(lat, lon, accuracy=10)`
-
-`android_set_mock_location` currently sends an ADB broadcast to `com.hermes.mocklocation.SET`. It expects a future Hermes Mock Location Helper App to receive the broadcast in authorized test environments.
 
 ## Phase 1 Self-Test Commands
 
@@ -66,36 +61,9 @@ bash scripts/check_device.sh
 bash scripts/dump_screen.sh
 bash scripts/test_input.sh
 bash scripts/test_screenshot.sh
-python scripts/test_mock_location.py 31.2304 121.4737 25
 ```
 
 The scripts call generic ADB primitives only. They do not automate any business App workflow.
-
-## Phase 2 Mock Location Helper
-
-The Android helper app lives in `android-helper/`.
-
-Build:
-
-```bash
-cd android-helper
-./gradlew :app:assembleDebug
-```
-
-This requires Android SDK Platform 36 via `ANDROID_HOME` or `android-helper/local.properties`.
-
-Install:
-
-```bash
-adb install -r app/build/outputs/apk/debug/app-debug.apk
-```
-
-Select `Hermes Mock Location Helper` in Pixel Developer options > Select mock location app, then test:
-
-```bash
-adb shell am broadcast -a com.hermes.mocklocation.SET --ef lat 31.2304 --ef lon 121.4737 --ef accuracy 10
-adb logcat -s HermesMockLocation
-```
 
 ## Phase 2.5 Hermes Profile Integration
 
@@ -118,6 +86,30 @@ Run the Hermes preflight from the repo root:
 PYTHONPATH=src python3 scripts/hermes_preflight.py
 ```
 
-The preflight imports `hermes_android_controller.skill_tools`, calls `android_device_status()`, and sends a test mock-location broadcast through `android_set_mock_location(31.2304, 121.4737, 10)`. It does not operate any enterprise App.
+The preflight imports `hermes_android_controller.skill_tools` and calls `android_device_status()`. It does not operate any enterprise App.
 
 After creating or changing the Skill link, restart Hermes so the `sunny-wechat-lite` profile rescans Skills. See [docs/phase-2.5-hermes-profile-integration.md](docs/phase-2.5-hermes-profile-integration.md) for restart notes, WeChat test wording, and troubleshooting.
+
+## Daily OA Approval Report Automation
+
+The daily OA approval scheduler can generate one dry-run approval report at a
+random time between 14:00 and 16:00, push the Markdown table to WeChat, and wait
+for the user to reply `确认审批` before any controlled execution occurs.
+
+See [docs/phase-6-daily-oa-approval-automation.md](docs/phase-6-daily-oa-approval-automation.md).
+
+## Ghostmapx Test-Device Location Helper
+
+Ghostmapx support is limited to address geocoding and visible UI control on the
+user's own Android test device. It must not be connected to attendance,
+check-in, enterprise workflows, risk-control bypass, hidden mock location,
+Root/Hook, or anti-detection behavior.
+
+Each address is translated to a center point, then the coordinate entered into
+Ghostmapx is randomized within a 50 meter radius so repeated uses of the same
+address do not produce the exact same coordinate:
+
+```bash
+PYTHONPATH=src python3 scripts/ghostmapx_location.py "上海市人民广场"
+PYTHONPATH=src python3 scripts/ghostmapx_location.py "上海市人民广场" --apply --confirm 确认Ghostmapx测试定位
+```

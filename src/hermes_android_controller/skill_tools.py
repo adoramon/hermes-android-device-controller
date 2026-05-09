@@ -11,6 +11,7 @@ from .app_probe import (
     summarize_screen,
 )
 from .approval_report import build_approval_wechat_report
+from .daily_approval_scheduler import run_daily_scan, run_once_if_due
 from .device_status import device_status
 from .enterprise_auth import (
     detect_sms_code_screen,
@@ -33,8 +34,14 @@ from .enterprise_approval_executor import (
     execute_work_hour_approval_confirmed,
     validate_daily_approval_confirmation_flow,
 )
+from .ghostmapx import (
+    apply_ghostmapx_location,
+    geocode_address,
+    open_ghostmapx,
+    prepare_ghostmapx_location,
+    probe_ghostmapx_screen,
+)
 from .input_actions import input_text, keyevent, open_app, swipe, tap
-from .mock_location import set_mock_location
 from .screen_reader import dump_screen_xml, take_screenshot
 
 
@@ -68,10 +75,6 @@ def android_dump_screen_xml() -> dict[str, object]:
 
 def android_take_screenshot() -> dict[str, object]:
     return take_screenshot()
-
-
-def android_set_mock_location(lat: float, lon: float, accuracy: float = 10) -> dict[str, object]:
-    return set_mock_location(lat, lon, accuracy)
 
 
 def android_open_enterprise_app():
@@ -167,6 +170,56 @@ def android_validate_approval_confirmation_flow(confirm_text: str = "") -> dict[
     return validate_daily_approval_confirmation_flow(confirm_text)
 
 
+def android_run_daily_approval_scan_once() -> dict[str, object]:
+    return run_once_if_due()
+
+
+def android_force_daily_approval_scan() -> dict[str, object]:
+    return run_daily_scan()
+
+
+def android_ghostmapx_geocode(
+    address: str,
+    provider: str = "auto",
+    random_radius_meters: float = 50,
+) -> dict[str, object]:
+    return geocode_address(address, provider=provider, random_radius_meters=random_radius_meters)
+
+
+def android_open_ghostmapx() -> dict[str, object]:
+    return open_ghostmapx()
+
+
+def android_probe_ghostmapx() -> dict[str, object]:
+    return probe_ghostmapx_screen()
+
+
+def android_prepare_ghostmapx_location(
+    address: str,
+    provider: str = "auto",
+    random_radius_meters: float = 50,
+) -> dict[str, object]:
+    return prepare_ghostmapx_location(
+        address,
+        provider=provider,
+        random_radius_meters=random_radius_meters,
+    )
+
+
+def android_apply_ghostmapx_location(
+    address: str,
+    provider: str = "auto",
+    confirm_text: str = "",
+    random_radius_meters: float = 50,
+) -> dict[str, object]:
+    return apply_ghostmapx_location(
+        address,
+        provider=provider,
+        confirm_text=confirm_text,
+        random_radius_meters=random_radius_meters,
+    )
+
+
 __all__ = [
     "android_device_status",
     "android_open_app",
@@ -176,7 +229,6 @@ __all__ = [
     "android_keyevent",
     "android_dump_screen_xml",
     "android_take_screenshot",
-    "android_set_mock_location",
     "android_open_enterprise_app",
     "android_probe_current_screen",
     "android_parse_current_ui",
@@ -196,6 +248,13 @@ __all__ = [
     "android_execute_comp_time_approval",
     "android_execute_missing_clock_approval",
     "android_validate_approval_confirmation_flow",
+    "android_run_daily_approval_scan_once",
+    "android_force_daily_approval_scan",
+    "android_ghostmapx_geocode",
+    "android_open_ghostmapx",
+    "android_probe_ghostmapx",
+    "android_prepare_ghostmapx_location",
+    "android_apply_ghostmapx_location",
     "device_status",
     "open_app",
     "tap",
@@ -204,7 +263,6 @@ __all__ = [
     "keyevent",
     "dump_screen_xml",
     "take_screenshot",
-    "set_mock_location",
     "open_enterprise_app",
     "probe_current_screen",
     "parse_ui_xml",
@@ -225,4 +283,11 @@ __all__ = [
     "execute_comp_time_approval",
     "execute_missing_clock_approval",
     "validate_daily_approval_confirmation_flow",
+    "run_once_if_due",
+    "run_daily_scan",
+    "geocode_address",
+    "open_ghostmapx",
+    "probe_ghostmapx_screen",
+    "prepare_ghostmapx_location",
+    "apply_ghostmapx_location",
 ]

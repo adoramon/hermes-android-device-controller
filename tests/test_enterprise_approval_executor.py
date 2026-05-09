@@ -8,7 +8,10 @@ from hermes_android_controller.enterprise_approval_executor import (
     validate_daily_approval_confirmation_flow,
     _capture_nodes,
     _click_node,
+    _click_first_confirmation,
+    _final_confirmation_candidate,
     _inspect_confirmation_surface,
+    _missing_clock_applicant_choice_control,
     _validation_work_hour_detail_selection,
     _webview_batch_control,
 )
@@ -142,6 +145,61 @@ class EnterpriseApprovalExecutorTests(unittest.TestCase):
         self.assertEqual(choice["bounds"]["center_y"], 327)
         self.assertEqual(approve["bounds"]["center_x"], 921)
 
+    def test_missing_clock_prefers_applicant_row_over_select_all(self):
+        page = {
+            "nodes": [
+                {
+                    "text": "未打卡申请审批",
+                    "resource_id": "com.bonc.mobile.jlmhim.tt:id/web_title",
+                    "class": "android.widget.TextView",
+                    "bounds": {"left": 375, "top": 162, "right": 704, "bottom": 225},
+                },
+                {
+                    "text": "",
+                    "resource_id": "com.bonc.mobile.jlmhim.tt:id/webview",
+                    "class": "android.webkit.WebView",
+                    "bounds": {"left": 0, "top": 259, "right": 1080, "bottom": 2337},
+                },
+            ]
+        }
+        plan_menu = {
+            "items": [
+                {
+                    "label": "陈香丽 visual row 1",
+                    "bounds": {
+                        "left": 0,
+                        "top": 480,
+                        "right": 1080,
+                        "bottom": 598,
+                        "center_x": 540,
+                        "center_y": 539,
+                    },
+                }
+            ]
+        }
+
+        choice = _missing_clock_applicant_choice_control(page, plan_menu)
+
+        self.assertEqual(choice["text"], "missing_clock_applicant_choice:陈香丽")
+        self.assertEqual(choice["bounds"]["center_y"], 539)
+        self.assertEqual(choice["bounds"]["center_x"], 48)
+        self.assertNotEqual(choice["bounds"]["center_y"], 327)
+
+    def test_missing_clock_can_use_visible_applicant_node(self):
+        page = {
+            "nodes": [
+                {
+                    "text": "陈香丽 20260427 未打卡申请",
+                    "bounds": {"left": 180, "top": 620, "right": 980, "bottom": 690, "center_x": 580, "center_y": 655},
+                }
+            ]
+        }
+
+        choice = _missing_clock_applicant_choice_control(page, None)
+
+        self.assertEqual(choice["bounds"]["center_y"], 655)
+        self.assertEqual(choice["bounds"]["center_x"], 48)
+
     def test_sensitive_click_log_has_required_fields(self):
         client = FakeClient()
         node = {"bounds": {"center_x": 10, "center_y": 20}, "text": "审批"}
@@ -206,6 +264,59 @@ class EnterpriseApprovalExecutorTests(unittest.TestCase):
         self.assertTrue(result["has_final_confirmation_candidate"])
         self.assertEqual(len(result["final_confirmation_candidates"]), 1)
         self.assertEqual(result["final_confirmation_candidates"][0]["text"], "确定")
+
+    def test_final_confirmation_candidate_ignores_pass_options(self):
+        page = {
+            "ok": True,
+            "nodes": [
+                {"text": "通过", "clickable": True, "bounds": {"center_x": 10, "center_y": 20}},
+                {"text": "同意", "clickable": True, "bounds": {"center_x": 30, "center_y": 40}},
+                {"text": "确认", "clickable": False, "bounds": {"center_x": 50, "center_y": 60}},
+            ],
+        }
+
+        result = _final_confirmation_candidate(page)
+
+        self.assertEqual(result["text"], "确认")
+
+    def test_click_first_confirmation_requires_dialog_dismissal(self):
+        client = FakeClient()
+        dialog = {
+            "ok": True,
+            "nodes": [
+                {"text": "确认", "clickable": False, "bounds": {"center_x": 50, "center_y": 60}},
+            ],
+            "xml_path": "/tmp/dialog.xml",
+            "screenshot_path": "/tmp/dialog.png",
+        }
+        dismissed = {"ok": True, "nodes": [], "xml_path": "/tmp/done.xml", "screenshot_path": "/tmp/done.png"}
+        with patch(
+            "hermes_android_controller.enterprise_approval_executor._capture_nodes",
+            side_effect=[dialog, dialog, dismissed, dismissed],
+        ):
+            logs = []
+            result = _click_first_confirmation(client, logs)
+
+        self.assertTrue(result["ok"])
+        self.assertEqual(logs[0]["clicked_text"], "确认")
+        self.assertIn(["input", "tap", "50", "60"], client.calls)
+
+    def test_click_first_confirmation_rejects_pass_without_final_confirm(self):
+        page = {
+            "ok": True,
+            "nodes": [
+                {"text": "通过", "clickable": True, "bounds": {"center_x": 10, "center_y": 20}},
+            ],
+            "xml_path": "/tmp/pass.xml",
+            "screenshot_path": "/tmp/pass.png",
+        }
+        with patch("hermes_android_controller.enterprise_approval_executor._capture_nodes", return_value=page):
+            logs = []
+            result = _click_first_confirmation(FakeClient(), logs)
+
+        self.assertFalse(result["ok"])
+        self.assertTrue(result["needs_manual_review"])
+        self.assertEqual(logs, [])
 
     def test_work_hour_detail_prefers_top_select_all(self):
         page = {

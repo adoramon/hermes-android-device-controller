@@ -38,10 +38,6 @@
       "description": "Capture a screenshot from the connected Android device."
     },
     {
-      "name": "android_set_mock_location",
-      "description": "Send a test-environment mock location broadcast to the Hermes Mock Location Helper App."
-    },
-    {
       "name": "android_open_enterprise_app",
       "description": "Open the configured enterprise Android app for read-only UI probing."
     },
@@ -112,19 +108,45 @@
     {
       "name": "android_execute_missing_clock_approval",
       "description": "Controlled missing-clock approval execution gated by the exact confirmation phrase."
+    },
+    {
+      "name": "android_run_daily_approval_scan_once",
+      "description": "Check the daily random 14:00-16:00 OA approval report schedule and send the dry-run WeChat report if due; never executes approvals."
+    },
+    {
+      "name": "android_force_daily_approval_scan",
+      "description": "Immediately run the OA approval dry-run scan and push the WeChat Markdown report; never executes approvals."
+    },
+    {
+      "name": "android_ghostmapx_geocode",
+      "description": "Translate an address into a longitude,latitude coordinate randomized within 50 meters by default for Ghostmapx."
+    },
+    {
+      "name": "android_open_ghostmapx",
+      "description": "Open Ghostmapx on the connected Android device."
+    },
+    {
+      "name": "android_probe_ghostmapx",
+      "description": "Read Ghostmapx foreground, coordinate text, and simulating status without changing location."
+    },
+    {
+      "name": "android_prepare_ghostmapx_location",
+      "description": "Geocode an address to a 50 meter randomized coordinate and report current Ghostmapx state without entering it."
+    },
+    {
+      "name": "android_apply_ghostmapx_location",
+      "description": "Enter a 50 meter randomized geocoded address into Ghostmapx only when the explicit confirmation phrase is provided; not for attendance/check-in or risk-control bypass."
     }
   ],
   "metadata": {
     "hermes": {
       "profile": "sunny-wechat-lite",
       "skillLink": "~/.hermes/profiles/sunny-wechat-lite/skills/hermes-android-device-controller-local",
-      "deviceId": "25091FDF60030U",
-      "mockLocationPackage": "com.hermes.mocklocation",
-      "mockLocationAction": "com.hermes.mocklocation.SET"
+      "deviceId": "25091FDF60030U"
     }
   },
   "safety": {
     "businessAutomation": false,
-    "mockLocation": "test-environments-only"
+    "mockLocation": "not-provided"
   }
 }

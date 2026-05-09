@@ -31,6 +31,8 @@ SMS_SUBMIT_TERMS = ("确认", "登录", "提交")
 PASSWORD_UPDATE_KEYWORDS = ("修改密码", "更新密码", "密码过期", "初始密码", "重置密码")
 PASSWORD_UPDATE_DISMISS_TERMS = ("忽略", "暂不修改", "暂时不修改", "稍后", "以后再说", "跳过", "取消")
 STRONG_PASSWORD_UPDATE_DISMISS_TERMS = ("忽略", "暂不修改", "暂时不修改", "以后再说")
+APP_UPDATE_KEYWORDS = ("最新版本", "更新内容", "版本大小", "立即更新")
+APP_UPDATE_DISMISS_TERMS = ("暂不更新", "以后再说", "稍后", "取消")
 
 
 def load_enterprise_credentials(env_path: str | Path | None = None) -> dict[str, object]:
@@ -225,6 +227,49 @@ def dismiss_password_update_prompt(client: AdbClient | None = None) -> dict[str,
     }
 
 
+def detect_app_update_prompt(
+    xml_path: str | Path | None = None,
+    client: AdbClient | None = None,
+) -> dict[str, object]:
+    """Detect an app update prompt that can be safely skipped."""
+
+    screen = _load_screen_nodes(xml_path=xml_path, client=client)
+    if not screen["ok"]:
+        return screen
+    nodes = screen["nodes"]
+    keyword_nodes = [node for node in nodes if _node_has_any(node, APP_UPDATE_KEYWORDS)]
+    dismiss_button = _find_app_update_dismiss_button(nodes)
+    is_prompt = bool(keyword_nodes) and dismiss_button is not None
+    return {
+        "ok": True,
+        "is_app_update_prompt": is_prompt,
+        "xml_path": screen.get("xml_path"),
+        "keyword_nodes": keyword_nodes,
+        "dismiss_button": dismiss_button,
+        "message": "App update prompt detected." if is_prompt else "App update prompt not detected.",
+    }
+
+
+def dismiss_app_update_prompt(client: AdbClient | None = None) -> dict[str, object]:
+    """Tap a safe skip option on an app update prompt."""
+
+    adb = client or get_default_client()
+    prompt = detect_app_update_prompt(client=adb)
+    dismiss_button = prompt.get("dismiss_button")
+    if not prompt.get("is_app_update_prompt"):
+        return {
+            "ok": False,
+            "message": "App update prompt not detected.",
+            "prompt": prompt,
+        }
+    tapped = _tap_node_center(adb, dismiss_button)
+    return {
+        "ok": tapped,
+        "message": "App update prompt dismissed." if tapped else "Dismiss button bounds were unavailable.",
+        "button": _node_ref(dismiss_button),
+    }
+
+
 def submit_sms_code(code: str, *, client: AdbClient | None = None) -> dict[str, object]:
     """Enter a user-provided SMS code and tap a confirmation button when present."""
 
@@ -287,6 +332,17 @@ def login_with_credentials(*, client: AdbClient | None = None, wait_seconds: flo
             "launch_stderr": launch.stderr,
         }
     time.sleep(wait_seconds)
+
+    app_update = dismiss_app_update_prompt_if_present(client=adb)
+    if app_update.get("is_app_update_prompt") and not app_update.get("ok"):
+        return {
+            "ok": False,
+            "need_manual_confirm": True,
+            "message": app_update.get("message", "App update prompt requires manual confirmation."),
+            "app_update_prompt": app_update,
+        }
+    if app_update.get("is_app_update_prompt") and app_update.get("ok"):
+        time.sleep(wait_seconds)
 
     login = detect_login_screen(client=adb)
     if not login.get("is_login_screen"):
@@ -368,6 +424,26 @@ def handle_wechat_sms_code_message(text: str, *, client: AdbClient | None = None
     return submit_sms_code(code, client=client)
 
 
+def dismiss_app_update_prompt_if_present(client: AdbClient | None = None) -> dict[str, object]:
+    """Dismiss a skippable app update prompt when present; no-op otherwise."""
+
+    adb = client or get_default_client()
+    prompt = detect_app_update_prompt(client=adb)
+    if not prompt.get("is_app_update_prompt"):
+        return {
+            "ok": True,
+            "is_app_update_prompt": False,
+            "message": prompt.get("message", "App update prompt not detected."),
+            "prompt": prompt,
+        }
+    dismissed = dismiss_app_update_prompt(client=adb)
+    return {
+        **dismissed,
+        "is_app_update_prompt": True,
+        "prompt": prompt,
+    }
+
+
 def extract_sms_code(text: str) -> str | None:
     match = SMS_CODE_PATTERN.search(text or "")
     return match.group(1) if match else None
@@ -444,6 +520,13 @@ def _find_sms_submit_button(nodes: Iterable[dict[str, object]]) -> dict[str, obj
 def _find_password_update_dismiss_button(nodes: Iterable[dict[str, object]]) -> dict[str, object] | None:
     for node in nodes:
         if node.get("clickable") and _node_has_any(node, PASSWORD_UPDATE_DISMISS_TERMS):
+            return node
+    return None
+
+
+def _find_app_update_dismiss_button(nodes: Iterable[dict[str, object]]) -> dict[str, object] | None:
+    for node in nodes:
+        if node.get("clickable") and _node_has_any(node, APP_UPDATE_DISMISS_TERMS):
             return node
     return None
 
@@ -619,6 +702,9 @@ __all__ = [
     "fill_login_credentials",
     "tap_login_button",
     "detect_sms_code_screen",
+    "detect_app_update_prompt",
+    "dismiss_app_update_prompt",
+    "dismiss_app_update_prompt_if_present",
     "detect_password_update_prompt",
     "dismiss_password_update_prompt",
     "request_sms_code_prompt",

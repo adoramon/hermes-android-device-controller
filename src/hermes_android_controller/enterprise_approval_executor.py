@@ -14,6 +14,7 @@ from .app_probe import ENTERPRISE_APP_PACKAGE, parse_ui_xml, probe_current_scree
 from .device_status import device_status
 from .enterprise_approval_probe import (
     APPROVAL_MENUS,
+    _ensure_approval_menu_home,
     build_daily_approval_plan,
     enter_approval_menu,
     return_to_main_screen,
@@ -55,7 +56,13 @@ def execute_daily_approval_plan(confirm_text: str, client: AdbClient | None = No
                 }
             )
             continue
-        results.append(_execute_menu_by_name(menu_name, client=adb, confirmed=True))
+        home = _ensure_approval_menu_home(client=adb)
+        if not home.get("ok"):
+            results.append(_execution_error(menu_name, "Failed to recover approval menu home.", home))
+            continue
+        result = _execute_menu_by_name(menu, client=adb, confirmed=True)
+        results.append(result)
+        _ensure_approval_menu_home(client=adb)
     return {
         "ok": all(bool(result.get("ok", True)) for result in results),
         "mode": "controlled_execution",
@@ -127,6 +134,7 @@ def execute_work_hour_approval(
     client: AdbClient | None = None,
     *,
     confirmed: bool = False,
+    plan_menu: dict[str, object] | None = None,
 ) -> dict[str, object]:
     if not confirmed:
         return _refused_result("Work-hour approval requires confirmed daily execution.")
@@ -138,13 +146,23 @@ def execute_work_hour_approval(
     page = _capture_nodes(adb)
     if not page["ok"]:
         return _execution_error("工时审批", "Failed to capture menu page.", page)
-    project_choice = _find_first_choice_left_of_terms(page["nodes"], ("项目", "待审批"))
-    if not project_choice:
-        return _needs_manual_review("工时审批", "Project selection control was not found.", page)
-    logs.append(_click_node(adb, project_choice, clicked_text="project_choice", sensitive_action=False))
-    approve_button = _find_clickable_action(_current_nodes(adb), ("审批",))
+    project_entry = _work_hour_project_entry_control(page, plan_menu)
+    if not project_entry:
+        return _needs_manual_review("工时审批", "Project entry control was not found.", page)
+    logs.append(_click_node(adb, project_entry, clicked_text="work_hour_project_entry", sensitive_action=False))
+    detail_page = _capture_nodes(adb)
+    if not detail_page["ok"]:
+        return _execution_error("工时审批", "Failed to capture work-hour detail page.", detail_page)
+    select_all = _validation_work_hour_detail_selection(plan_menu or {}, detail_page)
+    if not select_all:
+        return _needs_manual_review("工时审批", "Work-hour select-all control was not found.", detail_page, logs)
+    logs.append(_click_node(adb, select_all, clicked_text="work_hour_select_all", sensitive_action=False))
+    approve_page = _capture_nodes(adb)
+    approve_button = _find_clickable_action(approve_page.get("nodes", []), ("审批",))
     if not approve_button:
-        return _needs_manual_review("工时审批", "Approval button was not found after project selection.", page, logs)
+        approve_button = _webview_top_right_approve_control(approve_page)
+    if not approve_button:
+        return _needs_manual_review("工时审批", "Approval button was not found after selecting work-hour items.", approve_page, logs)
     logs.append(_click_node(adb, approve_button, clicked_text=_node_label(approve_button), sensitive_action=True))
     confirm = _click_first_confirmation(adb, logs)
     return _execution_result("工时审批", logs, confirm)
@@ -155,6 +173,7 @@ def execute_batch_employee_approval(
     client: AdbClient | None = None,
     *,
     confirmed: bool = False,
+    plan_menu: dict[str, object] | None = None,
 ) -> dict[str, object]:
     if not confirmed:
         return _refused_result(f"{menu_name} requires confirmed daily execution.")
@@ -168,12 +187,16 @@ def execute_batch_employee_approval(
     page = _capture_nodes(adb)
     if not page["ok"]:
         return _execution_error(menu_name, "Failed to capture menu page.", page)
-    employee_choice = _find_first_choice_left_of_terms(page["nodes"], ("我管理的员工", "员工"))
+    employee_choice = None
+    if menu_name == "未打卡审批":
+        employee_choice = _missing_clock_applicant_choice_control(page, plan_menu)
+    if not employee_choice:
+        employee_choice = _find_first_choice_left_of_terms(page["nodes"], ("我管理的员工", "员工"))
     if not employee_choice:
         employee_choice = _webview_batch_control(menu_name, page, "employee_choice")
     if not employee_choice:
         return _needs_manual_review(menu_name, "Employee selection control was not found.", page)
-    logs.append(_click_node(adb, employee_choice, clicked_text="employee_choice", sensitive_action=False))
+    logs.append(_click_node(adb, employee_choice, clicked_text=str(employee_choice.get("text") or "employee_choice"), sensitive_action=False))
     approve_button = _find_clickable_action(_current_nodes(adb), ("审批",))
     if not approve_button:
         approve_button = _webview_batch_control(menu_name, _capture_nodes(adb), "approve_button")
@@ -253,13 +276,14 @@ def _execution_decision(menu: dict[str, object]) -> dict[str, object]:
     return {"execute": True, "reason": "eligible"}
 
 
-def _execute_menu_by_name(menu_name: str, client: AdbClient, confirmed: bool) -> dict[str, object]:
+def _execute_menu_by_name(menu: dict[str, object], client: AdbClient, confirmed: bool) -> dict[str, object]:
+    menu_name = str(menu.get("menu_name", ""))
     if menu_name == "工时审批":
-        return execute_work_hour_approval(client=client, confirmed=confirmed)
+        return execute_work_hour_approval(client=client, confirmed=confirmed, plan_menu=menu)
     if menu_name == "请假审批":
         return execute_leave_approval(client=client, confirmed=confirmed)
     if menu_name in BATCH_EMPLOYEE_MENUS:
-        return execute_batch_employee_approval(menu_name, client=client, confirmed=confirmed)
+        return execute_batch_employee_approval(menu_name, client=client, confirmed=confirmed, plan_menu=menu)
     return _execution_error(menu_name, "Unsupported menu.", {})
 
 
@@ -355,6 +379,87 @@ def _validation_selection_control(
     return _find_first_choice_left_of_terms(nodes, ("待办", "请假", "申请"))
 
 
+def _work_hour_project_entry_control(
+    page: dict[str, object],
+    plan_menu: dict[str, object] | None = None,
+) -> dict[str, object] | None:
+    project_items = (plan_menu or {}).get("project_items") or (plan_menu or {}).get("items") or []
+    if isinstance(project_items, list) and project_items:
+        first = project_items[0]
+        if isinstance(first, dict) and isinstance(first.get("bounds"), dict):
+            return {
+                "text": "work_hour_project_entry",
+                "class": "android.view.View",
+                "clickable": True,
+                "bounds": first["bounds"],
+            }
+
+    nodes = page.get("nodes", [])
+    if not isinstance(nodes, list):
+        return None
+    candidates = []
+    for node in nodes:
+        label = _node_label(node)
+        bounds = node.get("bounds")
+        if not isinstance(bounds, dict):
+            continue
+        if any(term in label for term in ("待审批", "项目", "工时")) and not _is_header_or_action(label):
+            candidates.append(node)
+    if candidates:
+        return candidates[0]
+    return None
+
+
+def _missing_clock_applicant_choice_control(
+    page: dict[str, object],
+    plan_menu: dict[str, object] | None = None,
+) -> dict[str, object] | None:
+    planned = _planned_applicant_item(plan_menu, "陈香丽")
+    if planned:
+        bounds = planned.get("bounds")
+        if isinstance(bounds, dict) and isinstance(bounds.get("center_y"), int):
+            return {
+                "text": "missing_clock_applicant_choice:陈香丽",
+                "class": "android.view.View",
+                "clickable": True,
+                "bounds": _row_left_choice_bounds(page, int(bounds["center_y"])),
+            }
+
+    nodes = page.get("nodes", [])
+    if not isinstance(nodes, list):
+        return None
+    for node in nodes:
+        if "陈香丽" not in _node_label(node):
+            continue
+        bounds = node.get("bounds")
+        if isinstance(bounds, dict) and isinstance(bounds.get("center_y"), int):
+            return {
+                "text": "missing_clock_applicant_choice:陈香丽",
+                "class": "android.view.View",
+                "clickable": True,
+                "bounds": _row_left_choice_bounds(page, int(bounds["center_y"])),
+            }
+    return None
+
+
+def _planned_applicant_item(plan_menu: dict[str, object] | None, applicant: str) -> dict[str, object] | None:
+    items = (plan_menu or {}).get("items") or []
+    if not isinstance(items, list):
+        return None
+    for item in items:
+        if isinstance(item, dict) and applicant in str(item.get("label", "")):
+            return item
+    if len(items) == 1 and isinstance(items[0], dict):
+        return items[0]
+    return None
+
+
+def _row_left_choice_bounds(page: dict[str, object], center_y: int) -> dict[str, int]:
+    nodes = page.get("nodes", [])
+    screen_width = int(_screen_bounds(nodes if isinstance(nodes, list) else []).get("right", 1080))
+    return _centered_bounds(max(48, int(screen_width * 0.045)), center_y, 96, 96)
+
+
 def _validation_work_hour_detail_selection(menu: dict[str, object], page: dict[str, object]) -> dict[str, object] | None:
     select_all = _work_hour_detail_select_all_control(page)
     if select_all:
@@ -377,6 +482,13 @@ def _validation_work_hour_detail_selection(menu: dict[str, object], page: dict[s
                     "bounds": _centered_bounds(48, int(first["center_y"]), 96, 96),
                 }
     return None
+
+
+def _is_header_or_action(label: str) -> bool:
+    stripped = label.strip()
+    return stripped in {"我管理的项目", "我管理的员工", "审批", "全选"} or any(
+        term in stripped for term in ("web_title", "确认", "提交", "通过", "同意", "批准")
+    )
 
 
 def _work_hour_detail_select_all_control(page: dict[str, object]) -> dict[str, object] | None:
@@ -627,31 +739,63 @@ def _click_node(
 def _click_first_confirmation(adb: AdbClient, logs: list[dict[str, object]]) -> dict[str, object]:
     failures = 0
     for _ in range(2):
-        nodes = _current_nodes(adb)
-        confirm = _find_clickable_action(nodes, ("确认", "提交", "通过", "同意", "批准"))
+        page = _capture_nodes(adb)
+        if not page.get("ok"):
+            failures += 1
+            time.sleep(1)
+            continue
+        confirm = _final_confirmation_candidate(page)
         if not confirm:
             failures += 1
             if failures >= 2:
                 return {
                     "ok": False,
                     "needs_manual_review": True,
-                    "message": "Confirmation action not found twice.",
+                    "message": "Final confirmation button was not found twice.",
+                    "confirmation_surface": _inspect_confirmation_surface(page),
                 }
             time.sleep(1)
             continue
         log = _click_node(adb, confirm, clicked_text=_node_label(confirm), sensitive_action=True)
         logs.append(log)
+        after_page = _capture_nodes(adb)
+        after_inspection = _inspect_confirmation_surface(after_page)
+        dialog_gone = bool(after_page.get("ok")) and not after_inspection.get("has_final_confirmation_candidate")
         return {
-            "ok": bool(log.get("clicked")),
-            "needs_manual_review": not bool(log.get("clicked")),
-            "message": "Confirmation action clicked." if log.get("clicked") else "Confirmation click failed.",
+            "ok": bool(log.get("clicked")) and dialog_gone,
+            "needs_manual_review": not (bool(log.get("clicked")) and dialog_gone),
+            "message": "Final confirmation clicked and dialog dismissed."
+            if log.get("clicked") and dialog_gone
+            else "Final confirmation click did not dismiss the dialog.",
             "log": log,
+            "confirmation_surface_after_click": after_inspection,
         }
     return {
         "ok": False,
         "needs_manual_review": True,
-        "message": "Confirmation action was not completed.",
+        "message": "Final confirmation action was not completed.",
     }
+
+
+def _final_confirmation_candidate(page: dict[str, object]) -> dict[str, object] | None:
+    nodes = page.get("nodes", [])
+    if not isinstance(nodes, list):
+        nodes = []
+    candidates = [
+        node
+        for node in nodes
+        if _has_bounds(node) and any(term in _node_label(node) for term in ("确认", "确定", "提交"))
+    ]
+    if not candidates:
+        return None
+    preferred = [
+        node
+        for node in candidates
+        if str(node.get("text") or node.get("content_desc") or "").strip() in {"确认", "确定", "提交"}
+    ]
+    if preferred:
+        return preferred[-1]
+    return candidates[-1]
 
 
 def _find_clickable_action(nodes: Iterable[dict[str, object]], terms: tuple[str, ...]) -> dict[str, object] | None:

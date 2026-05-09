@@ -4,7 +4,7 @@
 
 让 `sunny-wechat-lite` Hermes Profile 能加载本仓库的本机 Skill，并通过本仓库的 Python 工具调用 USB 连接的 Pixel 6 ADB 控制能力。
 
-本阶段只验证设备控制基础能力：ADB 状态、通用输入、屏幕读取、截图、Mock Location Helper 广播。不实现企业 App 打卡流程，不实现风控绕过、隐藏 Mock Location、反检测、Root 或 Hook。
+本阶段只验证设备控制基础能力：ADB 状态、通用输入、屏幕读取、截图。不实现企业 App 打卡流程，不实现风控绕过、隐藏 Mock Location、反检测、Root 或 Hook。
 
 ## 软链接方式
 
@@ -39,7 +39,6 @@ PYTHONPATH=src python3 scripts/hermes_preflight.py
 
 - `hermes_android_controller.skill_tools` 是否可导入
 - `android_device_status()` 是否可调用
-- `android_set_mock_location(31.2304, 121.4737, 10)` 是否可调用
 
 它不会操作任何企业 App。
 
@@ -79,7 +78,7 @@ hermes --profile sunny-wechat-lite
 对 Pixel 6 执行 Hermes Android preflight
 ```
 
-预期 Hermes 运行本仓库 preflight，返回 import、ADB 状态、Mock Location Helper 广播结果。不应操作企业 App。
+预期 Hermes 运行本仓库 preflight，返回 import 和 ADB 状态结果。不应操作企业 App。
 
 ## 故障排查
 
@@ -160,21 +159,4 @@ adb devices -l
 adb kill-server
 adb start-server
 adb devices -l
-```
-
-### Mock Location Helper 未授权
-
-确认 helper app 已安装：
-
-```bash
-adb shell pm list packages | grep com.hermes.mocklocation
-```
-
-在 Pixel 6 上打开 Developer options，选择 `Hermes Mock Location Helper` 作为 mock location app。
-
-再测试广播：
-
-```bash
-adb shell am broadcast -a com.hermes.mocklocation.SET --ef lat 31.2304 --ef lon 121.4737 --ef accuracy 10
-adb logcat -s HermesMockLocation
 ```

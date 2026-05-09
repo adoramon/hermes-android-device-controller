@@ -50,14 +50,6 @@ def _status_summary(status: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _mock_location_summary(result: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "ok": result.get("ok"),
-        "message": result.get("message"),
-        "result": _command_summary(result.get("result")),
-    }
-
-
 def main() -> int:
     report: dict[str, Any] = {
         "ok": False,
@@ -65,10 +57,7 @@ def main() -> int:
     }
 
     try:
-        from hermes_android_controller.skill_tools import (
-            android_device_status,
-            android_set_mock_location,
-        )
+        from hermes_android_controller.skill_tools import android_device_status
 
         report["checks"]["python_import"] = {
             "ok": True,
@@ -88,16 +77,6 @@ def main() -> int:
         report["checks"]["android_device_status"] = _status_summary(status)
     except Exception as exc:  # pragma: no cover - diagnostic script
         report["checks"]["android_device_status"] = {
-            "ok": False,
-            "error": str(exc),
-            "traceback": traceback.format_exc(),
-        }
-
-    try:
-        mock_location = android_set_mock_location(31.2304, 121.4737, 10)
-        report["checks"]["android_set_mock_location"] = _mock_location_summary(mock_location)
-    except Exception as exc:  # pragma: no cover - diagnostic script
-        report["checks"]["android_set_mock_location"] = {
             "ok": False,
             "error": str(exc),
             "traceback": traceback.format_exc(),
