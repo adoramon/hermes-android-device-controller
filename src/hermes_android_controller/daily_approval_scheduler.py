@@ -1,8 +1,8 @@
 """Daily OA approval report scheduler.
 
-This module only schedules and sends the dry-run approval report. Real approval
-execution remains gated by the WeChat confirmation phrase handled by the Hermes
-gateway route.
+This module schedules and sends the dry-run approval report. Real approval
+execution remains gated by the WeChat confirmation phrase or local
+OA_APPROVAL_AUTO_EXECUTE authorization.
 """
 
 from __future__ import annotations
@@ -22,6 +22,7 @@ from typing import Any, Mapping
 
 from .artifact_archive import collect_artifacts, prune_old_runs, runs_dir
 from .approval_report import format_approval_wechat_report
+from .env_config import env_value
 from .enterprise_approval_probe import build_daily_approval_plan
 
 
@@ -43,6 +44,16 @@ def run_once_if_due(now: dt.datetime | None = None) -> dict[str, object]:
 
     scheduled_at = scheduled_datetime_for_day(current.date(), state=state)
     save_state(state)
+    window_end = dt.datetime.combine(current.date(), _parse_time(os.getenv("OA_APPROVAL_WINDOW_END", DEFAULT_WINDOW_END)))
+    if current > window_end:
+        return {
+            "ok": True,
+            "status": "skipped",
+            "reason": "missed_daily_window",
+            "date": today,
+            "scheduled_at": scheduled_at.isoformat(timespec="seconds"),
+            "window_end": window_end.isoformat(timespec="seconds"),
+        }
     if current < scheduled_at:
         return {
             "ok": True,
@@ -54,12 +65,21 @@ def run_once_if_due(now: dt.datetime | None = None) -> dict[str, object]:
     result = run_daily_scan(current)
     state["last_report_date"] = today
     state["last_report_at"] = current.isoformat(timespec="seconds")
-    state["pending_confirmation"] = {
-        "date": today,
-        "report_run_id": result.get("run_id"),
-        "created_at": current.isoformat(timespec="seconds"),
-        "confirm_phrase": "确认审批",
-    }
+    if result.get("safety", {}).get("auto_execute"):
+        state.pop("pending_confirmation", None)
+        state["last_auto_execution"] = {
+            "date": today,
+            "report_run_id": result.get("run_id"),
+            "created_at": current.isoformat(timespec="seconds"),
+            "ok": result.get("execution", {}).get("ok"),
+        }
+    else:
+        state["pending_confirmation"] = {
+            "date": today,
+            "report_run_id": result.get("run_id"),
+            "created_at": current.isoformat(timespec="seconds"),
+            "confirm_phrase": "确认审批",
+        }
     save_state(state)
     prune_old_runs()
     return result
@@ -93,8 +113,20 @@ def run_daily_scan(now: dt.datetime | None = None) -> dict[str, object]:
     _write_json(run_dir / "artifacts.json", artifacts)
 
     send_result = send_wechat_markdown(markdown)
+    execution_result = None
+    execution_send_result = None
+    if _auto_execute_enabled():
+        from .enterprise_approval_executor import execute_daily_approval_plan
+
+        execution_result = execute_daily_approval_plan("")
+        execution_send_result = send_wechat_markdown(_format_execution_wechat_report(execution_result))
     result = {
-        "ok": bool(plan.get("ok", True)) and bool(send_result.get("ok")),
+        "ok": (
+            bool(plan.get("ok", True))
+            and bool(send_result.get("ok"))
+            and (execution_result is None or bool(execution_result.get("ok")))
+            and (execution_send_result is None or bool(execution_send_result.get("ok")))
+        ),
         "status": "sent" if send_result.get("ok") else "send_failed",
         "mode": "daily_oa_approval_scan",
         "run_id": run_id,
@@ -103,14 +135,51 @@ def run_daily_scan(now: dt.datetime | None = None) -> dict[str, object]:
         "plan_path": str(run_dir / "plan.json"),
         "artifact_count": len(artifacts),
         "send": send_result,
+        "execution_send": execution_send_result,
+        "execution": execution_result,
         "safety": {
-            "auto_execute": False,
-            "confirmation_required": True,
+            "auto_execute": execution_result is not None,
+            "confirmation_required": execution_result is None,
             "confirmation_phrase": "确认审批",
+            "auto_execute_env": "OA_APPROVAL_AUTO_EXECUTE",
         },
     }
     _write_json(run_dir / "result.json", result)
     return result
+
+
+def _format_execution_wechat_report(execution: dict[str, object]) -> str:
+    results = execution.get("results", [])
+    if not isinstance(results, list):
+        results = []
+    authorization = execution.get("authorization")
+    authorization_mode = authorization.get("mode", "") if isinstance(authorization, dict) else ""
+    final_home = execution.get("final_home")
+    returned_home = bool(final_home.get("ok")) if isinstance(final_home, dict) else False
+    lines = [
+        "## 今日审批执行结果",
+        "",
+        f"- 总体状态：{'成功' if execution.get('ok') else '需要检查'}",
+        f"- 授权方式：{authorization_mode}",
+        f"- 已退回主界面：{'是' if returned_home else '否'}",
+        "",
+        "| 菜单 | 状态 | 结果 |",
+        "| --- | --- | --- |",
+    ]
+    for item in results:
+        if not isinstance(item, dict):
+            continue
+        menu_name = str(item.get("menu_name", ""))
+        if item.get("executed") is False or item.get("status") == "skipped":
+            status = "跳过"
+            detail = str(item.get("reason", ""))
+        else:
+            status = "已执行" if item.get("ok") else "需检查"
+            detail = str(item.get("message") or item.get("status") or "")
+        lines.append(f"| {menu_name} | {status} | {detail} |")
+    if not results:
+        lines.append("| 无 | 无待执行审批 | - |")
+    return "\n".join(lines)
 
 
 def scheduled_datetime_for_day(day: dt.date, *, state: dict[str, Any] | None = None) -> dt.datetime:
@@ -176,6 +245,10 @@ def send_wechat_markdown(markdown: str) -> dict[str, object]:
         return {"ok": False, "status": "url_error", "message": str(exc)}
 
 
+def _auto_execute_enabled() -> bool:
+    return env_value("OA_APPROVAL_AUTO_EXECUTE").lower() in {"1", "true", "yes", "on"}
+
+
 def load_state() -> dict[str, Any]:
     path = state_path()
     if not path.exists():
@@ -232,7 +305,21 @@ def _random_time_between(start: dt.time, end: dt.time) -> dt.time:
 
 def _write_json(path: Path, value: Mapping[str, Any] | dict[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding="utf-8")
+    path.write_text(json.dumps(_jsonable(value), ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _jsonable(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {str(key): _jsonable(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_jsonable(item) for item in value]
+    if isinstance(value, set):
+        return [_jsonable(item) for item in sorted(value, key=str)]
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    if hasattr(value, "to_dict"):
+        return value.to_dict()
+    return value
 
 
 def _append_worker_log(result: Mapping[str, object]) -> None:

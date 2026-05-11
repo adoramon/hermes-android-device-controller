@@ -1,7 +1,7 @@
 """Controlled enterprise approval execution.
 
-Phase 5 requires a fresh dry-run plan and an explicit confirmation phrase
-before any approval action is attempted.
+Phase 5 requires a fresh dry-run plan and either an explicit confirmation phrase
+or local auto-execute authorization before any approval action is attempted.
 """
 
 from __future__ import annotations
@@ -10,8 +10,9 @@ import time
 from typing import Iterable
 
 from .adb_client import AdbClient, get_default_client
-from .app_probe import ENTERPRISE_APP_PACKAGE, parse_ui_xml, probe_current_screen
+from .app_probe import enterprise_app_package, parse_ui_xml, probe_current_screen
 from .device_status import device_status
+from .env_config import env_value
 from .enterprise_approval_probe import (
     APPROVAL_MENUS,
     _ensure_approval_menu_home,
@@ -22,6 +23,9 @@ from .enterprise_approval_probe import (
 
 
 CONFIRM_PHRASE = "确认审批"
+AUTO_EXECUTE_ENV = "OA_APPROVAL_AUTO_EXECUTE"
+AUTO_EXECUTE_MAX_ITEMS_ENV = "OA_APPROVAL_AUTO_EXECUTE_MAX_ITEMS"
+AUTO_EXECUTE_MENUS_ENV = "OA_APPROVAL_AUTO_EXECUTE_MENUS"
 VALIDATION_CONFIRM_PHRASE = "确认执行审批前验证"
 SKIPPED_ACTIONS = {"needs_manual_review"}
 SENSITIVE_ACTION_TERMS = ("确认", "提交", "通过", "同意", "批准", "审批")
@@ -30,19 +34,21 @@ BATCH_EMPLOYEE_MENUS = ("考勤异常审批", "调休时长审批", "未打卡�
 
 
 def execute_daily_approval_plan(confirm_text: str, client: AdbClient | None = None) -> dict[str, object]:
-    """Execute a controlled approval plan only after exact confirmation."""
+    """Execute a controlled approval plan after chat or local env authorization."""
 
-    if confirm_text != CONFIRM_PHRASE:
-        return _refused_result("Confirmation phrase mismatch.")
+    authorization = _approval_execution_authorization(confirm_text)
+    if not authorization["authorized"]:
+        return _refused_result("Approval execution is not authorized by confirmation phrase or local env.")
 
     adb = client or get_default_client()
     plan = build_daily_approval_plan(client=adb)
+    policy = _auto_execution_policy() if authorization["mode"] == "env_auto_execute" else {}
     results = []
     for menu in plan.get("menus", []):
         if not isinstance(menu, dict):
             continue
         menu_name = str(menu.get("menu_name", ""))
-        decision = _execution_decision(menu)
+        decision = _execution_decision(menu, policy=policy)
         if not decision["execute"]:
             results.append(
                 {
@@ -63,15 +69,21 @@ def execute_daily_approval_plan(confirm_text: str, client: AdbClient | None = No
         result = _execute_menu_by_name(menu, client=adb, confirmed=True)
         results.append(result)
         _ensure_approval_menu_home(client=adb)
+    final_home = _ensure_approval_menu_home(client=adb)
     return {
-        "ok": all(bool(result.get("ok", True)) for result in results),
+        "ok": all(bool(result.get("ok", True)) for result in results) and bool(final_home.get("ok", True)),
         "mode": "controlled_execution",
         "confirmed": True,
+        "authorization": authorization,
         "dry_run_plan": plan,
         "results": results,
+        "final_home": final_home,
         "safety": {
-            "confirmation_required": True,
+            "confirmation_required": authorization["mode"] == "confirm_phrase",
+            "env_auto_execute": authorization["mode"] == "env_auto_execute",
             "confirmation_phrase": CONFIRM_PHRASE,
+            "auto_execute_env": AUTO_EXECUTE_ENV,
+            "auto_execute_policy": policy,
             "bypass_controls": False,
             "root_or_hook": False,
         },
@@ -233,38 +245,50 @@ def execute_leave_approval(
 
 
 def execute_attendance_exception_approval(confirm_text: str = "", client: AdbClient | None = None) -> dict[str, object]:
-    if confirm_text != CONFIRM_PHRASE:
+    if not _approval_execution_authorization(confirm_text)["authorized"]:
         return _refused_result("Confirmation phrase mismatch.")
     return execute_batch_employee_approval("考勤异常审批", client=client, confirmed=True)
 
 
 def execute_comp_time_approval(confirm_text: str = "", client: AdbClient | None = None) -> dict[str, object]:
-    if confirm_text != CONFIRM_PHRASE:
+    if not _approval_execution_authorization(confirm_text)["authorized"]:
         return _refused_result("Confirmation phrase mismatch.")
     return execute_batch_employee_approval("调休时长审批", client=client, confirmed=True)
 
 
 def execute_missing_clock_approval(confirm_text: str = "", client: AdbClient | None = None) -> dict[str, object]:
-    if confirm_text != CONFIRM_PHRASE:
+    if not _approval_execution_authorization(confirm_text)["authorized"]:
         return _refused_result("Confirmation phrase mismatch.")
     return execute_batch_employee_approval("未打卡审批", client=client, confirmed=True)
 
 
 def execute_work_hour_approval_confirmed(confirm_text: str = "", client: AdbClient | None = None) -> dict[str, object]:
-    if confirm_text != CONFIRM_PHRASE:
+    if not _approval_execution_authorization(confirm_text)["authorized"]:
         return _refused_result("Confirmation phrase mismatch.")
     return execute_work_hour_approval(client=client, confirmed=True)
 
 
 def execute_leave_approval_confirmed(confirm_text: str = "", client: AdbClient | None = None) -> dict[str, object]:
-    if confirm_text != CONFIRM_PHRASE:
+    if not _approval_execution_authorization(confirm_text)["authorized"]:
         return _refused_result("Confirmation phrase mismatch.")
     return execute_leave_approval(client=client, confirmed=True)
 
 
-def _execution_decision(menu: dict[str, object]) -> dict[str, object]:
+def _execution_decision(
+    menu: dict[str, object],
+    *,
+    policy: dict[str, object] | None = None,
+) -> dict[str, object]:
     if int(menu.get("item_count") or 0) <= 0:
         return {"execute": False, "reason": "item_count=0"}
+    values = policy or {}
+    allowed_menus = values.get("allowed_menus")
+    menu_name = str(menu.get("menu_name", ""))
+    if isinstance(allowed_menus, set) and allowed_menus and menu_name not in allowed_menus:
+        return {"execute": False, "reason": "menu_not_auto_enabled"}
+    max_items = values.get("max_items")
+    if isinstance(max_items, int) and max_items >= 0 and int(menu.get("item_count") or 0) > max_items:
+        return {"execute": False, "reason": f"item_count>{max_items}"}
     if menu.get("status") != "has_items":
         return {"execute": False, "reason": f"status={menu.get('status')}"}
     if menu.get("risk_level") == "high":
@@ -285,6 +309,40 @@ def _execute_menu_by_name(menu: dict[str, object], client: AdbClient, confirmed:
     if menu_name in BATCH_EMPLOYEE_MENUS:
         return execute_batch_employee_approval(menu_name, client=client, confirmed=confirmed, plan_menu=menu)
     return _execution_error(menu_name, "Unsupported menu.", {})
+
+
+def _approval_execution_authorization(confirm_text: str) -> dict[str, object]:
+    if confirm_text == CONFIRM_PHRASE:
+        return {"authorized": True, "mode": "confirm_phrase"}
+    if _env_flag(AUTO_EXECUTE_ENV):
+        return {"authorized": True, "mode": "env_auto_execute", "env": AUTO_EXECUTE_ENV}
+    return {"authorized": False, "mode": "refused", "env": AUTO_EXECUTE_ENV}
+
+
+def _auto_execution_policy() -> dict[str, object]:
+    return {
+        "allowed_menus": _auto_execute_allowed_menus(),
+        "max_items": _auto_execute_max_items(),
+    }
+
+
+def _auto_execute_allowed_menus() -> set[str]:
+    raw = env_value(AUTO_EXECUTE_MENUS_ENV)
+    if not raw:
+        return set(APPROVAL_MENUS)
+    return {value.strip() for value in raw.split(",") if value.strip()}
+
+
+def _auto_execute_max_items() -> int:
+    raw = env_value(AUTO_EXECUTE_MAX_ITEMS_ENV, "20")
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        return 0
+
+
+def _env_flag(name: str) -> bool:
+    return env_value(name).lower() in {"1", "true", "yes", "on"}
 
 
 def _validate_menu_confirmation_flow(menu: dict[str, object], client: AdbClient) -> dict[str, object]:
@@ -414,12 +472,12 @@ def _missing_clock_applicant_choice_control(
     page: dict[str, object],
     plan_menu: dict[str, object] | None = None,
 ) -> dict[str, object] | None:
-    planned = _planned_applicant_item(plan_menu, "陈香丽")
+    planned = _planned_applicant_item(plan_menu, "申请人C")
     if planned:
         bounds = planned.get("bounds")
         if isinstance(bounds, dict) and isinstance(bounds.get("center_y"), int):
             return {
-                "text": "missing_clock_applicant_choice:陈香丽",
+                "text": "missing_clock_applicant_choice:申请人C",
                 "class": "android.view.View",
                 "clickable": True,
                 "bounds": _row_left_choice_bounds(page, int(bounds["center_y"])),
@@ -429,12 +487,12 @@ def _missing_clock_applicant_choice_control(
     if not isinstance(nodes, list):
         return None
     for node in nodes:
-        if "陈香丽" not in _node_label(node):
+        if "申请人C" not in _node_label(node):
             continue
         bounds = node.get("bounds")
         if isinstance(bounds, dict) and isinstance(bounds.get("center_y"), int):
             return {
-                "text": "missing_clock_applicant_choice:陈香丽",
+                "text": "missing_clock_applicant_choice:申请人C",
                 "class": "android.view.View",
                 "clickable": True,
                 "bounds": _row_left_choice_bounds(page, int(bounds["center_y"])),
@@ -625,7 +683,8 @@ def _validation_error(
 
 def _capture_nodes(adb: AdbClient, attempts: int = 3) -> dict[str, object]:
     status = device_status(client=adb)
-    if status.get("foreground_package") != ENTERPRISE_APP_PACKAGE:
+    expected_package = enterprise_app_package()
+    if status.get("foreground_package") != expected_package:
         return {
             "ok": False,
             "nodes": [],
@@ -950,6 +1009,7 @@ def _refused_result(message: str) -> dict[str, object]:
         "status": "refused",
         "message": message,
         "required_confirm_text": CONFIRM_PHRASE,
+        "auto_execute_env": AUTO_EXECUTE_ENV,
     }
 
 

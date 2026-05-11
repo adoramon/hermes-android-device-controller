@@ -28,7 +28,7 @@ def sample_plan():
                 "menu_name": "考勤异常审批",
                 "status": "has_items",
                 "item_count": 4,
-                "applicant_summary": {"张方中": 2, "廖广源": 2},
+                "applicant_summary": {"申请人A": 2, "申请人B": 2},
                 "suggested_action": "batch_select_then_approve",
                 "risk_level": "high",
             },
@@ -50,7 +50,7 @@ def sample_plan():
                 "menu_name": "未打卡审批",
                 "status": "has_items",
                 "item_count": 1,
-                "applicant_summary": {"陈香丽": 1},
+                "applicant_summary": {"申请人C": 1},
                 "suggested_action": "batch_select_then_approve",
                 "risk_level": "medium",
             },
@@ -71,10 +71,10 @@ class ApprovalReportTests(unittest.TestCase):
         markdown = format_approval_wechat_report(sample_plan())
 
         self.assertIn("| 工时审批 | 待处理 | 1 项/4 人 | 项目数 1，待审批 4 人 | 确认后执行 |", markdown)
-        self.assertIn("| 考勤异常审批 | 待处理 | 4 条 | 张方中 2，廖广源 2 | 确认后执行 |", markdown)
+        self.assertIn("| 考勤异常审批 | 待处理 | 4 条 | 申请人A 2，申请人B 2 | 确认后执行 |", markdown)
         self.assertIn("| 请假审批 | 无数据 | 0 | 暂无数据 | 跳过 |", markdown)
         self.assertIn("| 调休时长审批 | 无数据 | 0 | 暂无数据 | 跳过 |", markdown)
-        self.assertIn("| 未打卡审批 | 待处理 | 1 条 | 陈香丽 | 确认后执行 |", markdown)
+        self.assertIn("| 未打卡审批 | 待处理 | 1 条 | 申请人C | 确认后执行 |", markdown)
 
     def test_wechat_report_appends_confirmation_prompt(self):
         markdown = format_approval_wechat_report(sample_plan())

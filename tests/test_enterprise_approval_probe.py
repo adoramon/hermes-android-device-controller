@@ -40,7 +40,7 @@ def node(text="", resource_id="", clickable=False, bounds=None):
 
 
 def webview_node():
-    return node("", resource_id="com.bonc.mobile.jlmhim.tt:id/webview", clickable=True) | {
+    return node("", resource_id="com.example.enterprise:id/webview", clickable=True) | {
         "class": "android.webkit.WebView"
     }
 
@@ -201,7 +201,7 @@ class EnterpriseApprovalProbeTests(unittest.TestCase):
             write_test_png(screenshot_path)
             summary = summarize_missing_clock_approval(
                 nodes=[
-                    node("未打卡申请审批", resource_id="com.bonc.mobile.jlmhim.tt:id/web_title"),
+                    node("未打卡申请审批", resource_id="com.example.enterprise:id/web_title"),
                     webview_node(),
                 ],
                 probe={"screenshot_path": screenshot_path},
@@ -226,7 +226,7 @@ class EnterpriseApprovalProbeTests(unittest.TestCase):
             )
             summary = summarize_attendance_exception_approval(
                 nodes=[
-                    node("考勤审批", resource_id="com.bonc.mobile.jlmhim.tt:id/web_title"),
+                    node("考勤审批", resource_id="com.example.enterprise:id/web_title"),
                     webview_node(),
                 ],
                 probe={"screenshot_path": screenshot_path},
@@ -234,7 +234,7 @@ class EnterpriseApprovalProbeTests(unittest.TestCase):
 
         self.assertEqual(summary["status"], "has_items")
         self.assertEqual(summary["item_count"], 4)
-        self.assertEqual(summary["applicant_summary"], {"张方中": 2, "廖广源": 2})
+        self.assertEqual(summary["applicant_summary"], {"申请人A": 2, "申请人B": 2})
 
     def test_leave_empty_copy_is_empty(self):
         summary = summarize_leave_approval(nodes=[node("暂无数据")])
@@ -255,11 +255,11 @@ class EnterpriseApprovalProbeTests(unittest.TestCase):
         self.assertEqual(summary["item_count"], 0)
 
     def test_missing_clock_item_with_end_marker_is_has_items(self):
-        summary = summarize_missing_clock_approval(nodes=[node("陈香丽20260427未打卡申请(下午)"), node("没有更多了")])
+        summary = summarize_missing_clock_approval(nodes=[node("申请人C20260427未打卡申请(下午)"), node("没有更多了")])
 
         self.assertEqual(summary["status"], "has_items")
         self.assertEqual(summary["item_count"], 1)
-        self.assertEqual(summary["applicant_summary"], {"陈香丽": 1})
+        self.assertEqual(summary["applicant_summary"], {"申请人C": 1})
 
     def test_sensitive_buttons_are_not_clicked_when_entering_menu(self):
         client = FakeClient()

@@ -10,17 +10,10 @@ metadata:
 
 # Hermes Android Device Controller
 
-Use this skill only for local Android device-control verification through the repository at:
+Use this skill only for local Android device-control verification from the
+repository configured in local `.env`.
 
-```bash
-/Users/administrator/Code/hermes-android-device-controller
-```
-
-Target device:
-
-```text
-Pixel 6 ADB serial: 25091FDF60030U
-```
+Target device serial is read from `ANDROID_DEVICE_ID`.
 
 ## Scope
 
@@ -75,14 +68,17 @@ Use this skill when the user asks in Chinese or English for:
 - `Ghostmapx 地址转坐标`
 - `android_prepare_ghostmapx_location`
 - `android_apply_ghostmapx_location`
+- `模拟到公司`
+- `模拟广州`
+- `模拟福州`
 
 For status or preflight requests, run the local scripts first and answer only from the command JSON/output. Do not freely infer device state from old chat history.
 For enterprise login requests, use local `.env` credentials only. If SMS verification is required, ask the user to reply exactly `企信验证码：xxxxxx`; do not read SMS or bypass verification.
 For approval menu requests, only run dry-run probes. Do not click approve, agree, pass, submit, confirm, or select-all controls.
 For WeChat approval plan reports, treat `生成打卡审批报告`, `打卡审批报告`, and `生成微信审批计划报告` as equivalent. Use `android_build_approval_wechat_report()` and return only the Markdown table plus the confirmation prompt. Do not include `risk_level`, XML paths, screenshot paths, or raw JSON in the WeChat reply.
-For controlled approval execution, require the exact phrase `确认审批`, build a fresh dry-run plan first, skip ineligible/unknown/manual-review menus, and record before/after XML and screenshots for every click.
-For daily OA approval automation, scheduled scans may only generate and push the dry-run Markdown report. They must not approve anything; approval execution remains gated by the WeChat phrase `确认审批`.
-For Ghostmapx requests, stay within personal/test-device usage: geocoding and read-only status probes are allowed; every address coordinate should be randomized within a 50 meter radius by default; entering coordinates requires the exact confirmation phrase `确认Ghostmapx测试定位`; never combine this with enterprise attendance/check-in, risk-control bypass, hiding mock location, Root/Hook, or anti-detection work.
+For controlled approval execution, require either the exact phrase `确认审批` or local `.env` setting `OA_APPROVAL_AUTO_EXECUTE=true`; build a fresh dry-run plan first, skip ineligible/unknown/manual-review menus, record before/after XML and screenshots for every click, and return to approval menu home before reporting completion.
+For daily OA approval automation, scheduled scans run only inside the configured 14:00-16:00 window, generate and push the dry-run Markdown report, then execute controlled approvals and push an execution-result summary when local `.env` sets `OA_APPROVAL_AUTO_EXECUTE=true`; otherwise approval execution remains gated by the WeChat phrase `确认审批`.
+For Ghostmapx requests, stay within personal/test-device usage: geocoding and read-only status probes are allowed; every address coordinate should be randomized within a 50 meter radius by default; entering coordinates requires either the exact confirmation phrase `确认Ghostmapx测试定位` or local `.env` setting `GHOSTMAPX_AUTO_APPLY=true`; never combine this with enterprise attendance/check-in, risk-control bypass, hiding mock location, Root/Hook, or anti-detection work. Location requests may use free-form text like `模拟到上海市人民广场` or configured aliases: `模拟到公司`, `模拟广州`, and `模拟福州`. Aliases may use local `GHOSTMAPX_COORD_*` fallbacks to avoid online geocoding. If the user asks to simulate a location, call `android_apply_ghostmapx_location` and report success only when the tool returns `ok=true`; successful application returns Android to the desktop.
 
 ## Tool Entrypoint
 
@@ -95,7 +91,7 @@ hermes_android_controller.skill_tools
 Run Python from the repo with `PYTHONPATH=src` unless the package has already been installed:
 
 ```bash
-cd /Users/administrator/Code/hermes-android-device-controller
+cd "$HERMES_ANDROID_SOURCE_DIR"
 PYTHONPATH=src python3 -c 'from hermes_android_controller.skill_tools import android_device_status; print(android_device_status()["message"])'
 ```
 
@@ -125,6 +121,8 @@ Available functions:
 - `android_run_daily_approval_scan_once()`
 - `android_force_daily_approval_scan()`
 - `android_ghostmapx_geocode(address, provider="auto", random_radius_meters=50)`
+- `android_ghostmapx_location_aliases()`
+- `android_resolve_ghostmapx_location(text)`
 - `android_open_ghostmapx()`
 - `android_probe_ghostmapx()`
 - `android_prepare_ghostmapx_location(address, provider="auto", random_radius_meters=50)`
@@ -140,49 +138,55 @@ Available functions:
 Check whether the profile link, Skill files, Python package path, and Pixel 6 ADB device are visible:
 
 ```bash
-cd /Users/administrator/Code/hermes-android-device-controller && bash scripts/verify_hermes_profile_link.sh
+cd "$HERMES_ANDROID_SOURCE_DIR" && bash scripts/verify_hermes_profile_link.sh
 ```
 
 Run the full Hermes preflight:
 
 ```bash
-cd /Users/administrator/Code/hermes-android-device-controller && PYTHONPATH=src python3 scripts/hermes_preflight.py
+cd "$HERMES_ANDROID_SOURCE_DIR" && PYTHONPATH=src python3 scripts/hermes_preflight.py
 ```
 
 Check device status only:
 
 ```bash
-cd /Users/administrator/Code/hermes-android-device-controller && PYTHONPATH=src python3 -c 'from hermes_android_controller.skill_tools import android_device_status; import json; print(json.dumps(android_device_status(), default=lambda o: o.to_dict() if hasattr(o, "to_dict") else str(o), ensure_ascii=False, indent=2))'
+cd "$HERMES_ANDROID_SOURCE_DIR" && PYTHONPATH=src python3 -c 'from hermes_android_controller.skill_tools import android_device_status; import json; print(json.dumps(android_device_status(), default=lambda o: o.to_dict() if hasattr(o, "to_dict") else str(o), ensure_ascii=False, indent=2))'
 ```
 
 Run authorized enterprise App login:
 
 ```bash
-cd /Users/administrator/Code/hermes-android-device-controller && PYTHONPATH=src python3 scripts/enterprise_login.py
+cd "$HERMES_ANDROID_SOURCE_DIR" && PYTHONPATH=src python3 scripts/enterprise_login.py
 ```
 
 Submit a user-provided SMS verification code:
 
 ```bash
-cd /Users/administrator/Code/hermes-android-device-controller && PYTHONPATH=src python3 scripts/submit_enterprise_sms_code.py 123456
+cd "$HERMES_ANDROID_SOURCE_DIR" && PYTHONPATH=src python3 scripts/submit_enterprise_sms_code.py 123456
 ```
 
 Build the dry-run daily approval plan:
 
 ```bash
-cd /Users/administrator/Code/hermes-android-device-controller && PYTHONPATH=src python3 scripts/build_daily_approval_plan.py
+cd "$HERMES_ANDROID_SOURCE_DIR" && PYTHONPATH=src python3 scripts/build_daily_approval_plan.py
 ```
 
 Build the WeChat approval plan report:
 
 ```bash
-cd /Users/administrator/Code/hermes-android-device-controller && PYTHONPATH=src python3 -c 'from hermes_android_controller.skill_tools import android_build_approval_wechat_report; print(android_build_approval_wechat_report()["markdown"])'
+cd "$HERMES_ANDROID_SOURCE_DIR" && PYTHONPATH=src python3 -c 'from hermes_android_controller.skill_tools import android_build_approval_wechat_report; print(android_build_approval_wechat_report()["markdown"])'
 ```
 
 Execute the controlled approval plan only after exact confirmation:
 
 ```bash
-cd /Users/administrator/Code/hermes-android-device-controller && PYTHONPATH=src python3 scripts/execute_daily_approval_plan.py --confirm "确认审批"
+cd "$HERMES_ANDROID_SOURCE_DIR" && PYTHONPATH=src python3 scripts/execute_daily_approval_plan.py --confirm "确认审批"
+```
+
+Or execute through local `.env` authorization:
+
+```bash
+cd "$HERMES_ANDROID_SOURCE_DIR" && OA_APPROVAL_AUTO_EXECUTE=true PYTHONPATH=src python3 scripts/execute_daily_approval_plan.py
 ```
 
 ## Preflight
@@ -190,7 +194,7 @@ cd /Users/administrator/Code/hermes-android-device-controller && PYTHONPATH=src 
 Before relying on the Android tools from Hermes, run:
 
 ```bash
-cd /Users/administrator/Code/hermes-android-device-controller
+cd "$HERMES_ANDROID_SOURCE_DIR"
 bash scripts/verify_hermes_profile_link.sh
 PYTHONPATH=src python3 scripts/hermes_preflight.py
 ```

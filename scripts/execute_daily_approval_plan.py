@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Execute the controlled daily approval plan after explicit confirmation."""
+"""Execute the controlled daily approval plan after chat or local env authorization."""
 
 from __future__ import annotations
 
@@ -17,6 +17,8 @@ def _jsonable(value: Any) -> Any:
         return {str(key): _jsonable(item) for key, item in value.items()}
     if isinstance(value, (list, tuple)):
         return [_jsonable(item) for item in value]
+    if isinstance(value, set):
+        return [_jsonable(item) for item in sorted(value, key=str)]
     if isinstance(value, bytes):
         return value.decode("utf-8", errors="replace")
     return value
@@ -24,7 +26,11 @@ def _jsonable(value: Any) -> Any:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--confirm", required=True, help="Must equal: 确认审批")
+    parser.add_argument(
+        "--confirm",
+        default="",
+        help="Must equal 确认审批 unless OA_APPROVAL_AUTO_EXECUTE=true is set in local env.",
+    )
     args = parser.parse_args()
     try:
         from hermes_android_controller.enterprise_approval_executor import execute_daily_approval_plan

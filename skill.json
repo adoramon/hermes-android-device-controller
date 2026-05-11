@@ -87,39 +87,47 @@
     },
     {
       "name": "android_execute_daily_approval_plan",
-      "description": "Execute eligible approval items only after exact user confirmation: 确认审批."
+      "description": "Execute eligible approval items after exact user confirmation or local OA_APPROVAL_AUTO_EXECUTE=true authorization."
     },
     {
       "name": "android_execute_work_hour_approval",
-      "description": "Controlled work-hour approval execution gated by the exact confirmation phrase."
+      "description": "Controlled work-hour approval execution gated by confirmation phrase or local auto-execute authorization."
     },
     {
       "name": "android_execute_attendance_exception_approval",
-      "description": "Controlled attendance-exception approval execution gated by the exact confirmation phrase."
+      "description": "Controlled attendance-exception approval execution gated by confirmation phrase or local auto-execute authorization."
     },
     {
       "name": "android_execute_leave_approval",
-      "description": "Controlled leave approval execution gated by the exact confirmation phrase."
+      "description": "Controlled leave approval execution gated by confirmation phrase or local auto-execute authorization."
     },
     {
       "name": "android_execute_comp_time_approval",
-      "description": "Controlled comp-time approval execution gated by the exact confirmation phrase."
+      "description": "Controlled comp-time approval execution gated by confirmation phrase or local auto-execute authorization."
     },
     {
       "name": "android_execute_missing_clock_approval",
-      "description": "Controlled missing-clock approval execution gated by the exact confirmation phrase."
+      "description": "Controlled missing-clock approval execution gated by confirmation phrase or local auto-execute authorization."
     },
     {
       "name": "android_run_daily_approval_scan_once",
-      "description": "Check the daily random 14:00-16:00 OA approval report schedule and send the dry-run WeChat report if due; never executes approvals."
+      "description": "Check the daily random 14:00-16:00 OA approval report schedule, send the dry-run WeChat report if due, and execute only when local auto-execute is enabled."
     },
     {
       "name": "android_force_daily_approval_scan",
-      "description": "Immediately run the OA approval dry-run scan and push the WeChat Markdown report; never executes approvals."
+      "description": "Immediately run the OA approval dry-run scan, push the WeChat Markdown report, and execute only when local auto-execute is enabled."
     },
     {
       "name": "android_ghostmapx_geocode",
-      "description": "Translate an address into a longitude,latitude coordinate randomized within 50 meters by default for Ghostmapx."
+      "description": "Translate an address or configured alias into a longitude,latitude coordinate randomized within 50 meters by default for Ghostmapx."
+    },
+    {
+      "name": "android_ghostmapx_location_aliases",
+      "description": "Return configured Ghostmapx location aliases such as 公司, 广州, and 福州."
+    },
+    {
+      "name": "android_resolve_ghostmapx_location",
+      "description": "Resolve WeChat-style Ghostmapx text such as 模拟到公司 or 模拟广州 into the configured address."
     },
     {
       "name": "android_open_ghostmapx",
@@ -131,18 +139,16 @@
     },
     {
       "name": "android_prepare_ghostmapx_location",
-      "description": "Geocode an address to a 50 meter randomized coordinate and report current Ghostmapx state without entering it."
+      "description": "Resolve an address or local alias coordinate fallback to a 50 meter randomized coordinate and report current Ghostmapx state without entering it."
     },
     {
       "name": "android_apply_ghostmapx_location",
-      "description": "Enter a 50 meter randomized geocoded address into Ghostmapx only when the explicit confirmation phrase is provided; not for attendance/check-in or risk-control bypass."
+      "description": "Enter a 50 meter randomized geocoded address or local alias coordinate fallback into Ghostmapx when authorized by explicit confirmation or local GHOSTMAPX_AUTO_APPLY=true; not for attendance/check-in or risk-control bypass."
     }
   ],
   "metadata": {
     "hermes": {
-      "profile": "sunny-wechat-lite",
-      "skillLink": "~/.hermes/profiles/sunny-wechat-lite/skills/hermes-android-device-controller-local",
-      "deviceId": "25091FDF60030U"
+      "configuration": "local-env"
     }
   },
   "safety": {

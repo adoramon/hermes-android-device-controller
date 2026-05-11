@@ -1,7 +1,9 @@
 # Phase 5.5: WeChat Approval Plan Report
 
-Phase 5.5 adds a concise WeChat-facing report for the Phase 4 dry-run approval plan.
-It is display-only and never executes approvals.
+Phase 5.5 adds a concise WeChat-facing report for the Phase 4 dry-run approval
+plan. The report itself is display-only; execution is handled separately by
+`android_execute_daily_approval_plan` or by the scheduler when local auto
+execution is enabled.
 
 ## WeChat Output
 
@@ -18,10 +20,10 @@ only the Markdown table and confirmation prompt:
 | 审批类型 | 状态 | 数量 | 明细 | 处理方式 |
 |---|---:|---:|---|---|
 | 工时审批 | 待处理 | 1 项/4 人 | 项目数 1，待审批 4 人 | 确认后执行 |
-| 考勤异常审批 | 待处理 | 4 条 | 张方中 2，廖广源 2 | 确认后执行 |
+| 考勤异常审批 | 待处理 | 4 条 | 申请人A 2，申请人B 2 | 确认后执行 |
 | 请假审批 | 无数据 | 0 | 暂无数据 | 跳过 |
 | 调休时长审批 | 无数据 | 0 | 暂无数据 | 跳过 |
-| 未打卡审批 | 待处理 | 1 条 | 陈香丽 | 确认后执行 |
+| 未打卡审批 | 待处理 | 1 条 | 申请人C | 确认后执行 |
 
 如确认执行，请回复：
 确认审批
@@ -52,10 +54,12 @@ payload containing the Markdown report and confirmation requirement.
 ## Execution Boundary
 
 The report does not approve anything.
-Execution still requires the exact user reply:
+Execution still requires either the exact user reply:
 
 ```text
 确认审批
 ```
+
+or local `.env` setting `OA_APPROVAL_AUTO_EXECUTE=true`.
 
 Approval execution remains handled by `android_execute_daily_approval_plan`.

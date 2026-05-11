@@ -13,7 +13,7 @@ import zlib
 from typing import Callable
 
 from .adb_client import AdbClient, get_default_client
-from .app_probe import ENTERPRISE_APP_PACKAGE, open_enterprise_app, parse_ui_xml, probe_current_screen
+from .app_probe import enterprise_app_package, open_enterprise_app, parse_ui_xml, probe_current_screen
 from .device_status import device_status
 
 
@@ -31,7 +31,7 @@ EMPLOYEE_TERMS = ("我管理的员工", "员工", "人员")
 LEAVE_TERMS = ("请假", "休假", "待办", "申请")
 HEADER_LABELS = ("我管理的项目", "我管理的员工")
 HEADER_RESOURCE_MARKERS = ("web_title",)
-KNOWN_APPLICANTS = ("张方中", "廖广源", "陈香丽")
+KNOWN_APPLICANTS = ("申请人A", "申请人B", "申请人C")
 
 
 def open_main_screen(client: AdbClient | None = None) -> dict[str, object]:
@@ -42,7 +42,7 @@ def open_main_screen(client: AdbClient | None = None) -> dict[str, object]:
     time.sleep(2)
     return {
         "ok": result.ok,
-        "package": ENTERPRISE_APP_PACKAGE,
+        "package": enterprise_app_package(),
         "message": "Enterprise app opened." if result.ok else "Failed to open enterprise app.",
         "returncode": result.returncode,
     }
@@ -414,7 +414,8 @@ def _detected_menu(menu_detection: dict[str, object], menu_name: str) -> bool:
 def _probe_current_screen_with_retries(client: AdbClient | None = None, attempts: int = 3) -> dict[str, object]:
     adb = client or get_default_client()
     status = device_status(client=adb)
-    if status.get("foreground_package") != ENTERPRISE_APP_PACKAGE:
+    expected_package = enterprise_app_package()
+    if status.get("foreground_package") != expected_package:
         return {
             "ok": False,
             "foreground_package": status.get("foreground_package"),
@@ -423,7 +424,7 @@ def _probe_current_screen_with_retries(client: AdbClient | None = None, attempts
             "diagnostics": {
                 "reason": "unexpected_foreground_package",
                 "current_foreground_package": status.get("foreground_package"),
-                "expected_foreground_package": ENTERPRISE_APP_PACKAGE,
+                "expected_foreground_package": expected_package,
                 "status_message": status.get("message"),
             },
         }
@@ -703,9 +704,9 @@ def _visual_item_labels(menu_name: str, count: int) -> list[str]:
     if menu_name == "工时审批":
         return [f"工时项目 visual row {index + 1}" for index in range(count)]
     if menu_name == "考勤异常审批" and count == 4:
-        return ["张方中 visual row 1", "张方中 visual row 2", "廖广源 visual row 3", "廖广源 visual row 4"]
+        return ["申请人A visual row 1", "申请人A visual row 2", "申请人B visual row 3", "申请人B visual row 4"]
     if menu_name == "未打卡审批" and count == 1:
-        return ["陈香丽 visual row 1"]
+        return ["申请人C visual row 1"]
     return [f"{menu_name} visual row {index + 1}" for index in range(count)]
 
 

@@ -13,7 +13,6 @@ import time
 from typing import Iterable
 
 from .adb_client import AdbClient, get_default_client
-from .app_probe import ENTERPRISE_APP_PACKAGE as DEFAULT_ENTERPRISE_APP_PACKAGE
 from .app_probe import parse_ui_xml
 from .device_status import device_status
 from .input_actions import open_app
@@ -23,8 +22,8 @@ from .screen_reader import dump_screen_xml
 USERNAME_ENV = "ENTERPRISE_APP_USERNAME"
 PASSWORD_ENV = "ENTERPRISE_APP_PASSWORD"
 PACKAGE_ENV = "ENTERPRISE_APP_PACKAGE"
-LOGIN_USER_ID = "com.bonc.mobile.jlmhim.tt:id/login_user"
-LOGIN_PASSWORD_ID = "com.bonc.mobile.jlmhim.tt:id/login_password"
+LOGIN_USER_ID_SUFFIX = ":id/login_user"
+LOGIN_PASSWORD_ID_SUFFIX = ":id/login_password"
 SMS_CODE_PATTERN = re.compile(r"企信验证码\s*[:：]\s*(\d{4,8})")
 SMS_KEYWORDS = ("验证码", "短信验证码", "请输入验证码", "获取验证码")
 SMS_SUBMIT_TERMS = ("确认", "登录", "提交")
@@ -41,8 +40,16 @@ def load_enterprise_credentials(env_path: str | Path | None = None) -> dict[str,
     env_file = _read_env_file(_resolve_env_path(env_path))
     username = os.environ.get(USERNAME_ENV) or env_file.get(USERNAME_ENV, "")
     password = os.environ.get(PASSWORD_ENV) or env_file.get(PASSWORD_ENV, "")
-    package_name = os.environ.get(PACKAGE_ENV) or env_file.get(PACKAGE_ENV, DEFAULT_ENTERPRISE_APP_PACKAGE)
-    missing = [name for name, value in ((USERNAME_ENV, username), (PASSWORD_ENV, password)) if not value]
+    package_name = os.environ.get(PACKAGE_ENV) or env_file.get(PACKAGE_ENV, "")
+    missing = [
+        name
+        for name, value in (
+            (PACKAGE_ENV, package_name),
+            (USERNAME_ENV, username),
+            (PASSWORD_ENV, password),
+        )
+        if not value
+    ]
     if missing:
         return {
             "ok": False,
@@ -67,8 +74,8 @@ def detect_login_screen(xml_path: str | Path | None = None, client: AdbClient | 
     if not screen["ok"]:
         return screen
     nodes = screen["nodes"]
-    username_node = _find_node_by_resource_id(nodes, LOGIN_USER_ID)
-    password_node = _find_node_by_resource_id(nodes, LOGIN_PASSWORD_ID)
+    username_node = _find_node_by_resource_id_suffix(nodes, LOGIN_USER_ID_SUFFIX)
+    password_node = _find_node_by_resource_id_suffix(nodes, LOGIN_PASSWORD_ID_SUFFIX)
     login_button = _find_login_button(nodes)
     ok = username_node is not None and password_node is not None and login_button is not None
     return {
@@ -478,6 +485,13 @@ def _load_screen_nodes(
 def _find_node_by_resource_id(nodes: Iterable[dict[str, object]], resource_id: str) -> dict[str, object] | None:
     for node in nodes:
         if node.get("resource_id") == resource_id:
+            return node
+    return None
+
+
+def _find_node_by_resource_id_suffix(nodes: Iterable[dict[str, object]], suffix: str) -> dict[str, object] | None:
+    for node in nodes:
+        if str(node.get("resource_id", "")).endswith(suffix):
             return node
     return None
 
