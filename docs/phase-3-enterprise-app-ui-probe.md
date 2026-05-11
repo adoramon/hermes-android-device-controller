@@ -3,7 +3,7 @@
 Phase 3 adds read-only UI probing for the enterprise Android app:
 
 ```text
-com.bonc.mobile.jlmhim.tt
+The enterprise app package name is read from local `.env`.
 ```
 
 ## Goal

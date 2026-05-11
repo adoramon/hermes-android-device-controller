@@ -9,6 +9,7 @@ android-helper/.gradle/
 .venv/
 venv/
 .env
+AGENTS.md
 dist/
 build/
 var/

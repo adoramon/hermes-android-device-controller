@@ -1,10 +1,7 @@
 # Phase 3.5: Enterprise Auth Login
 
-Phase 3.5 adds authorized login support for the enterprise Android app:
-
-```text
-com.bonc.mobile.jlmhim.tt
-```
+Phase 3.5 adds authorized login support for the enterprise Android app
+configured locally.
 
 ## .env Setup
 
@@ -17,7 +14,7 @@ cp .env.example .env
 Then fill:
 
 ```text
-ENTERPRISE_APP_PACKAGE=com.bonc.mobile.jlmhim.tt
+ENTERPRISE_APP_PACKAGE=
 ENTERPRISE_APP_USERNAME=
 ENTERPRISE_APP_PASSWORD=
 ```

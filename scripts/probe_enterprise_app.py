@@ -99,7 +99,7 @@ def _compact_diagnostics(value: Any) -> dict[str, Any] | None:
 def main() -> int:
     report: dict[str, Any] = {
         "ok": False,
-        "enterprise_app_package": "com.bonc.mobile.jlmhim.tt",
+        "enterprise_app_package": "configured-in-env",
         "safety": {
             "read_only": True,
             "business_submit": False,

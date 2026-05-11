@@ -2,21 +2,33 @@
 
 Phase 5 adds a controlled execution layer on top of the Phase 4 dry-run approval plan.
 
-## Confirmation Gate
+## Execution Authorization
 
-Execution is refused unless the user provides the exact confirmation phrase:
+Execution is refused unless one of these authorization paths is present:
+
+1. The user provides the exact confirmation phrase:
 
 ```text
 确认审批
 ```
 
-The command line interface requires:
+2. Local `.env` explicitly enables automatic execution:
+
+```dotenv
+OA_APPROVAL_AUTO_EXECUTE=true
+OA_APPROVAL_AUTO_EXECUTE_MAX_ITEMS=20
+OA_APPROVAL_AUTO_EXECUTE_MENUS=工时审批,考勤异常审批,请假审批,调休时长审批,未打卡审批
+```
+
+The command line interface accepts either path:
 
 ```bash
 PYTHONPATH=src python3 scripts/execute_daily_approval_plan.py --confirm "确认审批"
+PYTHONPATH=src python3 scripts/execute_daily_approval_plan.py
 ```
 
-Any other text returns a refused result and performs no approval action.
+If neither path is present, the result is refused and no approval action is
+performed.
 
 ## Supported Menus
 
@@ -75,13 +87,13 @@ The tool must capture XML and screenshot before and after each click.
 
 Phase 5 does not:
 
-- Run automatically.
-- Install launchd jobs.
-- Add timers.
+- Run automatically unless `OA_APPROVAL_AUTO_EXECUTE=true` is configured in
+  local `.env`.
 - Bypass risk controls.
 - Hide Mock Location.
 - Use Root or Hook.
-- Execute when the confirmation phrase is absent or incorrect.
+- Execute when both the confirmation phrase and local auto-execute flag are
+  absent.
 - Execute high-risk or unknown pages.
 
 ## WeChat Test Wording
@@ -107,10 +119,16 @@ Dry run:
 生成今日审批 Dry Run
 ```
 
-Controlled execution:
+Controlled execution by chat:
 
 ```text
 确认审批
+```
+
+Automatic execution by local configuration:
+
+```dotenv
+OA_APPROVAL_AUTO_EXECUTE=true
 ```
 
 Hermes should first run the dry-run plan, then execute only eligible low/medium-risk items. If anything is ambiguous, it must stop and return `needs_manual_review`.

@@ -16,21 +16,41 @@ from urllib.request import Request, urlopen
 from .adb_client import AdbClient, get_default_client
 from .app_probe import parse_ui_xml
 from .device_status import device_status
+from .env_config import env_value, require_env_value
 from .input_actions import open_app
 from .screen_reader import dump_screen_xml, take_screenshot
 
 
 GHOSTMAPX_PACKAGE_ENV = "GHOSTMAPX_PACKAGE"
-GHOSTMAPX_PACKAGE = "com.ghostmapx.app"
+GHOSTMAPX_PACKAGE = ""
 GHOSTMAPX_AMAP_KEY_ENV = "GHOSTMAPX_AMAP_KEY"
 GHOSTMAPX_CONFIRM_TEXT = "确认Ghostmapx测试定位"
+GHOSTMAPX_AUTO_APPLY_ENV = "GHOSTMAPX_AUTO_APPLY"
+GHOSTMAPX_LOCATION_COMPANY_ENV = "GHOSTMAPX_LOCATION_COMPANY"
+GHOSTMAPX_LOCATION_GUANGZHOU_ENV = "GHOSTMAPX_LOCATION_GUANGZHOU"
+GHOSTMAPX_LOCATION_FUZHOU_ENV = "GHOSTMAPX_LOCATION_FUZHOU"
+GHOSTMAPX_COORD_COMPANY_ENV = "GHOSTMAPX_COORD_COMPANY"
+GHOSTMAPX_COORD_GUANGZHOU_ENV = "GHOSTMAPX_COORD_GUANGZHOU"
+GHOSTMAPX_COORD_FUZHOU_ENV = "GHOSTMAPX_COORD_FUZHOU"
 DEFAULT_RANDOM_RADIUS_METERS = 50.0
 EARTH_RADIUS_METERS = 6_371_000.0
 
 SEARCH_INPUT_ID_SUFFIX = ":id/searchInput"
 COORD_TEXT_ID_SUFFIX = ":id/coordText"
 STATUS_TEXT_ID_SUFFIX = ":id/statusText"
+MOCK_TOGGLE_ID_SUFFIX = ":id/mockToggle"
 SIMULATING_TERMS = ("模拟中", "已模拟", "Mocking", "Simulating")
+LOCATION_COMMAND_PREFIXES = ("模拟到", "模拟至", "模拟")
+LOCATION_ALIAS_ENVS = {
+    "公司": GHOSTMAPX_LOCATION_COMPANY_ENV,
+    "广州": GHOSTMAPX_LOCATION_GUANGZHOU_ENV,
+    "福州": GHOSTMAPX_LOCATION_FUZHOU_ENV,
+}
+LOCATION_ALIAS_COORD_ENVS = {
+    "公司": GHOSTMAPX_COORD_COMPANY_ENV,
+    "广州": GHOSTMAPX_COORD_GUANGZHOU_ENV,
+    "福州": GHOSTMAPX_COORD_FUZHOU_ENV,
+}
 
 
 @dataclass(frozen=True)
@@ -72,9 +92,35 @@ def geocode_address(
 ) -> dict[str, object]:
     """Translate a human address into randomized longitude/latitude coordinates."""
 
-    normalized = _require_address(address)
+    env_path_value = _resolve_env_path(env_path)
+    env = _read_env_file(env_path_value)
+    location = resolve_location_request(address, env=env)
+    if not location["ok"]:
+        return location
+    normalized = str(location["address"])
     radius = _validate_random_radius(random_radius_meters)
-    env = _read_env_file(_resolve_env_path(env_path))
+    alias = location.get("alias")
+    if isinstance(alias, str):
+        try:
+            coordinates = _alias_coordinates(alias, env, radius)
+        except Exception as exc:
+            return {
+                "ok": False,
+                "message": f"Failed to read local alias coordinates: {exc}",
+                "input": address,
+                "alias": alias,
+                "address": normalized,
+                "provider": "local_env",
+            }
+        if coordinates is not None:
+            return {
+                "ok": True,
+                "message": "Address resolved from local alias coordinates and randomized.",
+                "input": address,
+                "alias": alias,
+                "address": normalized,
+                "coordinates": coordinates.to_dict(),
+            }
     selected_provider = _select_provider(provider, env)
     try:
         if selected_provider == "amap":
@@ -95,9 +141,43 @@ def geocode_address(
     return {
         "ok": True,
         "message": "Address geocoded and randomized.",
+        "input": address,
+        "alias": location.get("alias"),
         "address": normalized,
         "coordinates": coordinates.to_dict(),
     }
+
+
+def resolve_location_request(
+    text: str,
+    *,
+    env_path: str | Path | None = None,
+    env: dict[str, str] | None = None,
+) -> dict[str, object]:
+    """Resolve a WeChat-style location request or alias into a concrete address."""
+
+    values = env if env is not None else _read_env_file(_resolve_env_path(env_path))
+    requested = _strip_location_command_prefix(_require_address(text))
+    aliases = _location_aliases(values, include_os_env=env is None)
+    if requested in aliases:
+        return {
+            "ok": True,
+            "input": text,
+            "alias": requested,
+            "address": aliases[requested],
+        }
+    return {
+        "ok": True,
+        "input": text,
+        "alias": None,
+        "address": requested,
+    }
+
+
+def location_aliases(env_path: str | Path | None = None) -> dict[str, str]:
+    """Return configured Ghostmapx location aliases."""
+
+    return _location_aliases(_read_env_file(_resolve_env_path(env_path)))
 
 
 def open_ghostmapx(client: AdbClient | None = None) -> dict[str, object]:
@@ -200,11 +280,16 @@ def apply_ghostmapx_location(
     casual address mention in chat or by unrelated enterprise automation.
     """
 
-    if confirm_text != GHOSTMAPX_CONFIRM_TEXT:
+    authorization = _ghostmapx_authorization(confirm_text)
+    if not authorization["authorized"]:
         return {
             "ok": False,
-            "message": f"Refusing to modify Ghostmapx without confirm_text={GHOSTMAPX_CONFIRM_TEXT!r}.",
+            "message": (
+                f"Refusing to modify Ghostmapx without confirm_text={GHOSTMAPX_CONFIRM_TEXT!r} "
+                f"or local {GHOSTMAPX_AUTO_APPLY_ENV}=true."
+            ),
             "required_confirm_text": GHOSTMAPX_CONFIRM_TEXT,
+            "auto_apply_env": GHOSTMAPX_AUTO_APPLY_ENV,
         }
 
     adb = client or get_default_client()
@@ -237,21 +322,29 @@ def apply_ghostmapx_location(
         latitude=str(coordinates["latitude"]),
     )
     time.sleep(2)
-    after = probe_ghostmapx_screen(client=adb)
+    after_entry = probe_ghostmapx_screen(client=adb)
+    start = _start_mocking_if_needed(adb, after_entry)
+    after = _wait_for_simulating(adb, timeout_seconds=12.0)
     coord_text = _node_text(after.get("coord_text"))
     target_changed = _coord_text_matches(coord_text or "", ghostmapx_text)
+    ok = bool(entered.get("ok")) and bool(after.get("is_simulating")) and target_changed
+    desktop = _return_to_desktop(adb) if ok else None
     return {
-        "ok": bool(entered.get("ok")) and bool(after.get("is_simulating")) and target_changed,
+        "ok": ok,
         "message": (
             "Ghostmapx coordinate entered and app reports simulating."
-            if bool(entered.get("ok")) and bool(after.get("is_simulating")) and target_changed
+            if ok
             else "Coordinate entry did not produce the expected Ghostmapx coordinate and simulating state."
         ),
         "address": address,
         "coordinates": coordinates,
+        "authorization": authorization,
         "entered": entered,
         "before": _screen_summary(before),
+        "after_entry": _screen_summary(after_entry),
+        "start": start,
         "after": _screen_summary(after),
+        "desktop": desktop,
     }
 
 
@@ -275,7 +368,9 @@ def _enter_manual_coordinates(
     if len(fields) < 2:
         return {"ok": False, "message": "Manual coordinate dialog fields were not found."}
     longitude_result = _replace_numeric_field_text(adb, fields[0], f"{float(longitude):.6f}")
-    latitude_result = _replace_numeric_field_text(adb, fields[1], f"{float(latitude):.6f}")
+    adb.shell(["input", "keyevent", "KEYCODE_DPAD_DOWN"])
+    time.sleep(0.2)
+    latitude_result = _replace_focused_numeric_field_text(adb, f"{float(latitude):.6f}")
     if not longitude_result.get("ok") or not latitude_result.get("ok"):
         return {
             "ok": False,
@@ -301,10 +396,49 @@ def _enter_manual_coordinates(
     }
 
 
+def _start_mocking_if_needed(adb: AdbClient, screen: dict[str, object]) -> dict[str, object]:
+    if screen.get("is_simulating"):
+        return {"ok": True, "message": "Ghostmapx already reports simulating.", "clicked": False}
+    nodes = _current_nodes(adb)
+    toggle = _find_node_by_suffix(nodes, MOCK_TOGGLE_ID_SUFFIX)
+    if not toggle:
+        return {"ok": False, "message": "Ghostmapx mock toggle was not found.", "clicked": False}
+    clicked = _tap_node_center(adb, toggle)
+    return {
+        "ok": clicked,
+        "message": "Ghostmapx mock toggle tapped." if clicked else "Failed to tap Ghostmapx mock toggle.",
+        "clicked": clicked,
+    }
+
+
+def _wait_for_simulating(adb: AdbClient, *, timeout_seconds: float) -> dict[str, object]:
+    deadline = time.monotonic() + timeout_seconds
+    last = probe_ghostmapx_screen(client=adb)
+    while time.monotonic() < deadline:
+        if last.get("is_simulating"):
+            return last
+        time.sleep(1)
+        last = probe_ghostmapx_screen(client=adb)
+    return last
+
+
+def _return_to_desktop(adb: AdbClient) -> dict[str, object]:
+    result = adb.shell(["input", "keyevent", "KEYCODE_HOME"])
+    return {
+        "ok": result.ok,
+        "message": "Returned to Android desktop." if result.ok else "Failed to return to Android desktop.",
+        "returncode": result.returncode,
+    }
+
+
 def _replace_numeric_field_text(adb: AdbClient, node: dict[str, object], text: str) -> dict[str, object]:
     if not _tap_node_center(adb, node):
         return {"ok": False, "message": "Field bounds were unavailable."}
     time.sleep(0.2)
+    return _replace_focused_numeric_field_text(adb, text)
+
+
+def _replace_focused_numeric_field_text(adb: AdbClient, text: str) -> dict[str, object]:
     adb.shell(["input", "keyevent", "KEYCODE_MOVE_END"])
     for _ in range(40):
         adb.shell(["input", "keyevent", "KEYCODE_DEL"])
@@ -541,8 +675,68 @@ def _require_address(address: str) -> str:
     return address.strip()
 
 
+def _strip_location_command_prefix(text: str) -> str:
+    value = text.strip()
+    for prefix in LOCATION_COMMAND_PREFIXES:
+        if value.startswith(prefix):
+            stripped = value[len(prefix) :].strip(" ：:，,")
+            return stripped or value
+    return value
+
+
+def _location_aliases(env: dict[str, str], *, include_os_env: bool = True) -> dict[str, str]:
+    aliases: dict[str, str] = {}
+    for alias, env_name in LOCATION_ALIAS_ENVS.items():
+        value = ((os.environ.get(env_name) if include_os_env else "") or env.get(env_name, "")).strip()
+        if value:
+            aliases[alias] = value
+    return aliases
+
+
+def _alias_coordinates(alias: str, env: dict[str, str], radius: float) -> Coordinates | None:
+    env_name = LOCATION_ALIAS_COORD_ENVS.get(alias)
+    if not env_name:
+        return None
+    value = (os.environ.get(env_name) or env.get(env_name, "")).strip()
+    if not value:
+        return None
+    longitude, latitude = _parse_coordinate_pair(value, env_name)
+    return _randomize_coordinates(
+        Coordinates(
+            longitude=longitude,
+            latitude=latitude,
+            provider="local_env",
+            raw={"env": env_name},
+        ),
+        radius,
+    )
+
+
+def _parse_coordinate_pair(value: str, env_name: str) -> tuple[float, float]:
+    parts = [part.strip() for part in value.replace("，", ",").split(",")]
+    if len(parts) != 2:
+        raise ValueError(f"{env_name} must be formatted as longitude,latitude.")
+    longitude = float(parts[0])
+    latitude = float(parts[1])
+    if not -180 <= longitude <= 180 or not -90 <= latitude <= 90:
+        raise ValueError(f"{env_name} contains coordinates outside valid ranges.")
+    return longitude, latitude
+
+
 def _ghostmapx_package() -> str:
-    return os.environ.get(GHOSTMAPX_PACKAGE_ENV, GHOSTMAPX_PACKAGE)
+    return require_env_value(GHOSTMAPX_PACKAGE_ENV)
+
+
+def _ghostmapx_authorization(confirm_text: str) -> dict[str, object]:
+    if confirm_text == GHOSTMAPX_CONFIRM_TEXT:
+        return {"authorized": True, "mode": "confirm_phrase"}
+    if _truthy_env(GHOSTMAPX_AUTO_APPLY_ENV):
+        return {"authorized": True, "mode": "local_env", "env": GHOSTMAPX_AUTO_APPLY_ENV}
+    return {"authorized": False, "mode": "missing"}
+
+
+def _truthy_env(name: str) -> bool:
+    return env_value(name).lower() in {"1", "true", "yes", "y", "on"}
 
 
 def _resolve_env_path(env_path: str | Path | None = None) -> Path:

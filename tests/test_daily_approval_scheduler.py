@@ -18,6 +18,7 @@ class DailyApprovalSchedulerTests(unittest.TestCase):
                 "OA_APPROVAL_STATE_DIR": self.temp_dir.name,
                 "OA_APPROVAL_WINDOW_START": "14:00",
                 "OA_APPROVAL_WINDOW_END": "16:00",
+                "OA_APPROVAL_AUTO_EXECUTE": "false",
             },
             clear=False,
         )
@@ -43,6 +44,16 @@ class DailyApprovalSchedulerTests(unittest.TestCase):
         result = scheduler.run_once_if_due(dt.datetime(2026, 5, 5, 14, 0))
 
         self.assertEqual(result["status"], "waiting")
+        self.assertEqual(scheduler.load_state().get("last_report_date"), None)
+
+    def test_run_once_skips_after_daily_window(self):
+        state = {"scheduled_times": {"2026-05-05": "15:30:00"}}
+        scheduler.save_state(state)
+
+        result = scheduler.run_once_if_due(dt.datetime(2026, 5, 5, 16, 1))
+
+        self.assertEqual(result["status"], "skipped")
+        self.assertEqual(result["reason"], "missed_daily_window")
         self.assertEqual(scheduler.load_state().get("last_report_date"), None)
 
     def test_run_once_runs_only_once_per_day(self):
@@ -76,6 +87,23 @@ class DailyApprovalSchedulerTests(unittest.TestCase):
 
         self.assertFalse(result["ok"])
         self.assertEqual(result["status"], "not_configured")
+
+    def test_run_daily_scan_executes_when_auto_env_enabled(self):
+        with patch.dict(os.environ, {"OA_APPROVAL_AUTO_EXECUTE": "true"}, clear=False), patch(
+            "hermes_android_controller.daily_approval_scheduler.build_daily_approval_plan",
+            return_value={"ok": True, "menus": []},
+        ), patch(
+            "hermes_android_controller.daily_approval_scheduler.send_wechat_markdown",
+            return_value={"ok": True},
+        ), patch(
+            "hermes_android_controller.enterprise_approval_executor.execute_daily_approval_plan",
+            return_value={"ok": True, "mode": "controlled_execution"},
+        ) as execute:
+            result = scheduler.run_daily_scan(dt.datetime(2026, 5, 5, 14, 1))
+
+        execute.assert_called_once_with("")
+        self.assertTrue(result["safety"]["auto_execute"])
+        self.assertEqual(result["execution"]["mode"], "controlled_execution")
 
 
 if __name__ == "__main__":

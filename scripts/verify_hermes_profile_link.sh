@@ -1,12 +1,20 @@
 #!/usr/bin/env bash
 set -u
 
-SOURCE_DIR="/Users/administrator/Code/hermes-android-device-controller"
-PROFILE_DIR="${HOME}/.hermes/profiles/sunny-wechat-lite"
-LINK_PATH="${PROFILE_DIR}/skills/hermes-android-device-controller-local"
+if [ -f ".env" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . ".env"
+  set +a
+fi
+
+SOURCE_DIR="${HERMES_ANDROID_SOURCE_DIR:-$(pwd)}"
+PROFILE_DIR="${HERMES_PROFILE_DIR:-}"
+LINK_NAME="${HERMES_ANDROID_SKILL_LINK_NAME:-hermes-android-device-controller-local}"
+LINK_PATH="${PROFILE_DIR}/skills/${LINK_NAME}"
 SNAPSHOT_PATH="${PROFILE_DIR}/.skills_prompt_snapshot.json"
 SOUL_PATH="${PROFILE_DIR}/SOUL.md"
-DEVICE_ID="25091FDF60030U"
+DEVICE_ID="${ANDROID_DEVICE_ID:-}"
 FAILURES=0
 WARNINGS=0
 
@@ -24,7 +32,9 @@ fail() {
   FAILURES=$((FAILURES + 1))
 }
 
-if [ -L "${LINK_PATH}" ]; then
+if [ -z "${PROFILE_DIR}" ]; then
+  fail "HERMES_PROFILE_DIR is not set; add it to local .env"
+elif [ -L "${LINK_PATH}" ]; then
   TARGET="$(readlink "${LINK_PATH}")"
   if [ "${TARGET}" = "${SOURCE_DIR}" ]; then
     ok "Hermes skill link points to ${SOURCE_DIR}"
@@ -91,7 +101,9 @@ else
   warn "SOUL.md is missing; skipping profile routing hint check"
 fi
 
-if ! command -v adb >/dev/null 2>&1; then
+if [ -z "${DEVICE_ID}" ]; then
+  warn "ANDROID_DEVICE_ID is not set; skipping exact-device ADB check"
+elif ! command -v adb >/dev/null 2>&1; then
   fail "adb is not on PATH"
 else
   ADB_OUTPUT="$(adb devices 2>&1)"

@@ -1,8 +1,8 @@
 # hermes-android-device-controller
 
-Hermes Android Device Controller is a Python-based ADB control base for a USB-connected Pixel 6 on a Mac mini. It provides a narrow, auditable device-control layer for Hermes Android execution environments.
+Hermes Android Device Controller is a Python-based ADB control base for a USB-connected Android test device on macOS. It provides a narrow, auditable device-control layer for Hermes Android execution environments.
 
-This repository intentionally does not implement real attendance, approval, risk-control bypass, fake check-in, or enterprise App automation workflows. Phase 1 is limited to generic ADB primitives and local device self-tests. Phase 2.5 is limited to Hermes Skill/profile integration and local device-control verification.
+This repository intentionally does not implement attendance/check-in, risk-control bypass, fake check-in, or hidden automation workflows. Approval execution is limited to controlled, auditable flows gated by either the `确认审批` phrase or local `.env` setting `OA_APPROVAL_AUTO_EXECUTE=true`.
 
 ## Project Layout
 
@@ -67,10 +67,10 @@ The scripts call generic ADB primitives only. They do not automate any business 
 
 ## Phase 2.5 Hermes Profile Integration
 
-The local Hermes Skill can be linked into the `sunny-wechat-lite` profile:
+The local Hermes Skill can be linked into the configured Hermes profile:
 
 ```bash
-cd /Users/administrator/Code/hermes-android-device-controller
+cd $HERMES_ANDROID_SOURCE_DIR
 bash scripts/link_to_sunny_wechat_lite.sh
 ```
 
@@ -88,13 +88,17 @@ PYTHONPATH=src python3 scripts/hermes_preflight.py
 
 The preflight imports `hermes_android_controller.skill_tools` and calls `android_device_status()`. It does not operate any enterprise App.
 
-After creating or changing the Skill link, restart Hermes so the `sunny-wechat-lite` profile rescans Skills. See [docs/phase-2.5-hermes-profile-integration.md](docs/phase-2.5-hermes-profile-integration.md) for restart notes, WeChat test wording, and troubleshooting.
+After creating or changing the Skill link, restart Hermes so the configured Hermes profile rescans Skills. See [docs/phase-2.5-hermes-profile-integration.md](docs/phase-2.5-hermes-profile-integration.md) for restart notes, WeChat test wording, and troubleshooting.
 
 ## Daily OA Approval Report Automation
 
 The daily OA approval scheduler can generate one dry-run approval report at a
-random time between 14:00 and 16:00, push the Markdown table to WeChat, and wait
-for the user to reply `确认审批` before any controlled execution occurs.
+random time between 14:00 and 16:00 and push the Markdown table to WeChat. It
+waits for `确认审批` by default; if local `.env` sets
+`OA_APPROVAL_AUTO_EXECUTE=true`, it can execute eligible controlled approvals
+without a chat confirmation, push a second execution-result message, and return
+to the approval menu home before reporting completion. Missed jobs are not run
+after the configured end time.
 
 See [docs/phase-6-daily-oa-approval-automation.md](docs/phase-6-daily-oa-approval-automation.md).
 
@@ -113,3 +117,25 @@ address do not produce the exact same coordinate:
 PYTHONPATH=src python3 scripts/ghostmapx_location.py "上海市人民广场"
 PYTHONPATH=src python3 scripts/ghostmapx_location.py "上海市人民广场" --apply --confirm 确认Ghostmapx测试定位
 ```
+
+For local test rigs where WeChat location simulation should run without a second
+chat confirmation, set `GHOSTMAPX_AUTO_APPLY=true` in local `.env`. The tool
+still reports failure unless Ghostmapx opens, the coordinate is entered, and the
+app reports a simulating state. After a successful simulation it sends Android
+Home so the device is left on the desktop.
+
+Ghostmapx also supports local `.env` aliases for WeChat-style requests:
+
+- `GHOSTMAPX_LOCATION_COMPANY` for `模拟到公司`
+- `GHOSTMAPX_LOCATION_GUANGZHOU` for `模拟广州`
+- `GHOSTMAPX_LOCATION_FUZHOU` for `模拟福州`
+
+For aliases that should not depend on online geocoding, set local coordinate
+fallbacks as `longitude,latitude`:
+
+- `GHOSTMAPX_COORD_COMPANY`
+- `GHOSTMAPX_COORD_GUANGZHOU`
+- `GHOSTMAPX_COORD_FUZHOU`
+
+Free-form requests such as `模拟到上海市人民广场` are treated as direct
+addresses.

@@ -58,7 +58,7 @@ class UiParserTests(unittest.TestCase):
 
     def test_input_fields_are_identified(self):
         nodes = parse_ui_xml(self._write_xml())
-        summary = summarize_nodes(nodes, foreground_package="com.bonc.mobile.jlmhim.tt")
+        summary = summarize_nodes(nodes, foreground_package="com.example.enterprise")
 
         self.assertEqual(len(summary["input_fields"]), 1)
         self.assertEqual(summary["input_fields"][0]["resource_id"], "com.example:id/name_input")

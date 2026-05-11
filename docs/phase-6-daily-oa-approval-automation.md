@@ -3,14 +3,16 @@
 ## Goal
 
 Hermes can run one daily OA approval scan at a random time between 14:00 and
-16:00, send a concise Markdown approval plan to WeChat, and then wait for the
-user to reply:
+16:00, send a concise Markdown approval plan to WeChat, and then either wait
+for the user to reply or execute automatically when local `.env` explicitly
+enables auto execution.
 
 ```text
 确认审批
 ```
 
-The scheduled job never executes approvals by itself.
+The scheduled job never executes approvals unless `OA_APPROVAL_AUTO_EXECUTE=true`
+is configured locally.
 
 ## Flow
 
@@ -20,9 +22,13 @@ The scheduled job never executes approvals by itself.
 3. It saves the raw plan, Markdown report, copied screenshots, and copied UI
    XML under `var/oa_approval/runs/<run-id>/`.
 4. It sends the Markdown report to WeChat through a Hermes deliver-only webhook.
-5. The existing WeChat route waits for the user to reply `确认审批`.
-6. Only that reply triggers controlled approval execution.
-7. Hermes sends the execution result back to WeChat.
+5. If `OA_APPROVAL_AUTO_EXECUTE=true`, Hermes immediately runs controlled
+   approval execution with a fresh dry-run plan.
+6. Otherwise, the existing WeChat route waits for the user to reply `确认审批`.
+7. Only local auto-execute configuration or that reply triggers controlled
+   approval execution.
+8. Hermes sends the execution result back to WeChat when the route handles that
+   delivery.
 
 ## Configuration
 
@@ -35,11 +41,14 @@ OA_APPROVAL_WECHAT_CHAT_ID=
 OA_APPROVAL_WINDOW_START=14:00
 OA_APPROVAL_WINDOW_END=16:00
 OA_APPROVAL_STATE_DIR=var/oa_approval
+OA_APPROVAL_AUTO_EXECUTE=false
+OA_APPROVAL_AUTO_EXECUTE_MAX_ITEMS=20
+OA_APPROVAL_AUTO_EXECUTE_MENUS=
 ```
 
 Do not commit `.env`.
 
-The Hermes `sunny-wechat-lite` profile needs a deliver-only webhook route:
+The Hermes configured Hermes profile needs a deliver-only webhook route:
 
 ```yaml
 platforms:
@@ -86,7 +95,7 @@ random scheduled time stable.
 Use a LaunchAgent that runs:
 
 ```bash
-cd /Users/administrator/Code/hermes-android-device-controller
+cd $HERMES_ANDROID_SOURCE_DIR
 PYTHONPATH=src python3 scripts/daily_approval_scheduler.py --once
 ```
 
@@ -105,9 +114,11 @@ run stores:
 
 ## Safety
 
-- The scheduled job does not click approval, pass, agree, submit, or confirm.
-- The scheduled job only sends a dry-run report.
-- Real approval execution still requires the exact WeChat phrase `确认审批`.
+- The scheduled job does not click approval, pass, agree, submit, or confirm
+  unless local `.env` sets `OA_APPROVAL_AUTO_EXECUTE=true`.
+- Without auto execution, the scheduled job only sends a dry-run report.
+- Real approval execution requires either local auto execution or the exact
+  WeChat phrase `确认审批`.
 - Credentials remain local in `.env`.
 - No SMS reading, risk-control bypass, anti-detection, Root, or Hook behavior is
   implemented.

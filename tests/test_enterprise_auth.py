@@ -20,9 +20,9 @@ from hermes_android_controller.enterprise_auth import (
 
 LOGIN_XML = """<?xml version="1.0" encoding="UTF-8"?>
 <hierarchy rotation="0">
-  <node text="请输入账号" resource-id="com.bonc.mobile.jlmhim.tt:id/login_user" class="android.widget.EditText" content-desc="" clickable="true" enabled="true" bounds="[151,1078][1014,1176]" />
-  <node text="请输入密码" resource-id="com.bonc.mobile.jlmhim.tt:id/login_password" class="android.widget.EditText" content-desc="" clickable="true" enabled="true" bounds="[151,1189][938,1287]" />
-  <node text="登录" resource-id="com.bonc.mobile.jlmhim.tt:id/login_login" class="android.widget.Button" content-desc="" clickable="true" enabled="true" bounds="[53,1444][1027,1570]" />
+  <node text="请输入账号" resource-id="com.example.enterprise:id/login_user" class="android.widget.EditText" content-desc="" clickable="true" enabled="true" bounds="[151,1078][1014,1176]" />
+  <node text="请输入密码" resource-id="com.example.enterprise:id/login_password" class="android.widget.EditText" content-desc="" clickable="true" enabled="true" bounds="[151,1189][938,1287]" />
+  <node text="登录" resource-id="com.example.enterprise:id/login_login" class="android.widget.Button" content-desc="" clickable="true" enabled="true" bounds="[53,1444][1027,1570]" />
 </hierarchy>
 """
 
@@ -82,6 +82,7 @@ class EnterpriseAuthTests(unittest.TestCase):
             result = load_enterprise_credentials(env_path=missing_path)
 
         self.assertFalse(result["ok"])
+        self.assertIn("ENTERPRISE_APP_PACKAGE", result["missing"])
         self.assertIn("ENTERPRISE_APP_USERNAME", result["missing"])
         self.assertIn("ENTERPRISE_APP_PASSWORD", result["missing"])
 
@@ -116,8 +117,8 @@ class EnterpriseAuthTests(unittest.TestCase):
         result = detect_login_screen(xml_path=self._write_xml(LOGIN_XML))
 
         self.assertTrue(result["is_login_screen"])
-        self.assertEqual(result["username_field"]["resource_id"], "com.bonc.mobile.jlmhim.tt:id/login_user")
-        self.assertEqual(result["password_field"]["resource_id"], "com.bonc.mobile.jlmhim.tt:id/login_password")
+        self.assertEqual(result["username_field"]["resource_id"], "com.example.enterprise:id/login_user")
+        self.assertEqual(result["password_field"]["resource_id"], "com.example.enterprise:id/login_password")
         self.assertEqual(result["login_button"]["text"], "登录")
 
     def test_sms_code_screen_is_detected(self):

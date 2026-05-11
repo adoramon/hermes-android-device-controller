@@ -37,9 +37,11 @@ from .enterprise_approval_executor import (
 from .ghostmapx import (
     apply_ghostmapx_location,
     geocode_address,
+    location_aliases,
     open_ghostmapx,
     prepare_ghostmapx_location,
     probe_ghostmapx_screen,
+    resolve_location_request,
 )
 from .input_actions import input_text, keyevent, open_app, swipe, tap
 from .screen_reader import dump_screen_xml, take_screenshot
@@ -186,6 +188,14 @@ def android_ghostmapx_geocode(
     return geocode_address(address, provider=provider, random_radius_meters=random_radius_meters)
 
 
+def android_ghostmapx_location_aliases() -> dict[str, object]:
+    return {"ok": True, "aliases": location_aliases()}
+
+
+def android_resolve_ghostmapx_location(text: str) -> dict[str, object]:
+    return resolve_location_request(text)
+
+
 def android_open_ghostmapx() -> dict[str, object]:
     return open_ghostmapx()
 
@@ -251,6 +261,8 @@ __all__ = [
     "android_run_daily_approval_scan_once",
     "android_force_daily_approval_scan",
     "android_ghostmapx_geocode",
+    "android_ghostmapx_location_aliases",
+    "android_resolve_ghostmapx_location",
     "android_open_ghostmapx",
     "android_probe_ghostmapx",
     "android_prepare_ghostmapx_location",
@@ -286,6 +298,8 @@ __all__ = [
     "run_once_if_due",
     "run_daily_scan",
     "geocode_address",
+    "location_aliases",
+    "resolve_location_request",
     "open_ghostmapx",
     "probe_ghostmapx_screen",
     "prepare_ghostmapx_location",

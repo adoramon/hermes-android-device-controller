@@ -8,11 +8,13 @@ import xml.etree.ElementTree as ET
 
 from .adb_client import AdbClient, AdbCommandResult, get_default_client
 from .device_status import device_status
+from .env_config import env_value, require_env_value
 from .input_actions import open_app
 from .screen_reader import dump_screen_xml, take_screenshot
 
 
-ENTERPRISE_APP_PACKAGE = "com.bonc.mobile.jlmhim.tt"
+ENTERPRISE_APP_PACKAGE_ENV = "ENTERPRISE_APP_PACKAGE"
+ENTERPRISE_APP_PACKAGE = env_value(ENTERPRISE_APP_PACKAGE_ENV)
 INPUT_CLASS_MARKERS = ("EditText", "AutoCompleteTextView")
 SENSITIVE_ACTION_TERMS = ("打卡", "提交", "确认", "审批通过")
 NON_TITLE_TEXT_MARKERS = ("公网安备", "ICP备", "备案", "请输入", "忘记密码")
@@ -22,17 +24,18 @@ def open_enterprise_app(client: AdbClient | None = None):
     """Open the configured enterprise app without performing business actions."""
 
     adb = client or get_default_client()
+    package_name = enterprise_app_package()
     before = device_status(client=adb)
-    if before.get("foreground_package") == ENTERPRISE_APP_PACKAGE:
+    if before.get("foreground_package") == package_name:
         result = AdbCommandResult(
             command=[],
             timeout=adb.default_timeout,
-            stdout=f"{ENTERPRISE_APP_PACKAGE} is already foreground; monkey launch skipped.",
+            stdout="Enterprise app is already foreground; monkey launch skipped.",
             stderr="",
             returncode=0,
         )
     else:
-        result = open_app(ENTERPRISE_APP_PACKAGE, client=adb)
+        result = open_app(package_name, client=adb)
     time.sleep(3)
     return result
 
@@ -41,7 +44,7 @@ def probe_current_screen(client: AdbClient | None = None) -> dict[str, object]:
     """Capture foreground package, UI XML, and screenshot for read-only inspection."""
 
     adb = client or get_default_client()
-    stable = _wait_for_stable_foreground(client=adb, expected_package=ENTERPRISE_APP_PACKAGE)
+    stable = _wait_for_stable_foreground(client=adb, expected_package=enterprise_app_package())
     status = stable.get("status") if isinstance(stable.get("status"), dict) else device_status(client=adb)
     xml_result = _dump_screen_xml_with_retries(client=adb, attempts=3, interval_seconds=1)
     screenshot_result = take_screenshot(client=adb)
@@ -132,6 +135,10 @@ def summarize_nodes(
         },
         "node_count": len(nodes),
     }
+
+
+def enterprise_app_package() -> str:
+    return require_env_value(ENTERPRISE_APP_PACKAGE_ENV)
 
 
 def _wait_for_stable_foreground(
@@ -319,7 +326,9 @@ def _is_title_candidate(text: str, node: dict[str, object]) -> bool:
 
 __all__ = [
     "ENTERPRISE_APP_PACKAGE",
+    "ENTERPRISE_APP_PACKAGE_ENV",
     "SENSITIVE_ACTION_TERMS",
+    "enterprise_app_package",
     "open_enterprise_app",
     "probe_current_screen",
     "parse_ui_xml",
